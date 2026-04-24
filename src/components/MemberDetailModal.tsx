@@ -1,4 +1,4 @@
-// src/components/MemberDetailModal.tsx -- version 2.9
+// src/components/MemberDetailModal.tsx -- version 3.1
 
 import React, { useState, useMemo } from 'react';
 import { X, User, Calendar, MapPin, BookOpen, Quote, Users, Heart, Baby, AlertCircle } from 'lucide-react';
@@ -40,7 +40,7 @@ interface Props {
 const MemberDetailModal: React.FC<Props> = ({ member, members, onClose }) => {
   const [showFullImage, setShowFullImage] = useState(false);
   const displayAvatar = useMemo(() => {
-    const localImg = localStorage.getItem(`mock_git_src/assets/images/${member.id}.webp`);
+    const localImg = localStorage.getItem(`public/images/${member.id}.webp`);
     if (localImg) {
       return localImg.startsWith('data:') ? localImg : `data:image/webp;base64,${localImg}`;
     }

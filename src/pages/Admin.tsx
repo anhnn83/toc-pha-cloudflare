@@ -1,4 +1,4 @@
-// src/pages/Admin.tsx -- Version 5.4 (Bảo mật đa tầng)
+// src/pages/Admin.tsx -- Version 5.5
 
 import React, { useState, useEffect } from 'react';
 import { 
@@ -139,10 +139,10 @@ export const Admin: React.FC<AdminProps> = ({ onBack, globalMembers, setGlobalMe
       let newFullList = [...globalMembers];
 
       if (newImageBase64) {
-        const imagePath = `src/assets/images/${finalMember.id}.webp`;
+        const imagePath = `public/images/${finalMember.id}.webp`;
         await auth.service.updateFile(imagePath, newImageBase64.split(',')[1], undefined, `[Ảnh] Cập nhật: ${finalMember.fullName}`);
       }
-      finalMember.avatarUrl = `/src/assets/images/${finalMember.id}.webp`;
+      finalMember.avatarUrl = `/images/${finalMember.id}.webp`;
 
       if (finalMember.relationType === 'in_law' && finalMember._bloodlineSpouseId) {
         const bloodlineId = finalMember._bloodlineSpouseId;
@@ -246,7 +246,8 @@ export const Admin: React.FC<AdminProps> = ({ onBack, globalMembers, setGlobalMe
     setIsSaving(true);
     try {
       const newPin = Math.floor(100000 + Math.random() * 900000).toString();
-      const encryptedTokenForMod = encryptToken(auth.rawToken, newPin, config.auth.salt);
+      const secretSalt = config.auth.salt + (import.meta.env.VITE_APP_SALT || "");
+      const encryptedTokenForMod = encryptToken(auth.rawToken, newPin, secretSalt);
       const configFile = await auth.service.getFile('config.json');
       const newConfig = JSON.parse(JSON.stringify(configFile?.content || config));
       

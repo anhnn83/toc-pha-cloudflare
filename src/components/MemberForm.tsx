@@ -1,4 +1,4 @@
-// src/components/MemberForm.tsx -- Version 4.3 (Cập nhật thông tin người thực hiện)
+// src/components/MemberForm.tsx -- Version 4.4
 
 import React, { useState, useEffect, useRef, useMemo } from 'react';
 import { Save, X, Trash2, HelpCircle, UploadCloud, User, Loader2 } from 'lucide-react';
@@ -38,7 +38,7 @@ const MemberForm: React.FC<MemberFormProps> = ({ member, allMembers, onSave, onC
   // 1. Phục hồi ảnh preview từ LocalStorage
   useEffect(() => {
     if (!isNew && !imagePreview) {
-      const localImg = localStorage.getItem(`mock_git_src/assets/images/${formData.id}.webp`);
+      const localImg = localStorage.getItem(`public/images/${member.id}.webp`);
       if (localImg) {
         setImagePreview(localImg.startsWith('data:') ? localImg : `data:image/webp;base64,${localImg}`);
       }
@@ -173,13 +173,13 @@ const MemberForm: React.FC<MemberFormProps> = ({ member, allMembers, onSave, onC
                   {imagePreview ? (
                     <img src={imagePreview} className="w-full h-full object-cover" alt="Preview" />
                   ) : !isNew ? (
-                    <img src={`/src/assets/images/${formData.id}.webp`} 
+                    <img src={`/images/${formData.id}.webp`}
                          onError={(e) => {
                            const target = e.currentTarget;
                            const currentExt = target.src.match(/\.(webp|jpg|png|jpeg)$/)?.[0] || '';
                            const exts = ['.webp', '.jpg', '.png', '.jpeg'];
                            const nextIdx = exts.indexOf(currentExt) + 1;
-                           if (nextIdx < exts.length) target.src = `/src/assets/images/${formData.id}${exts[nextIdx]}`;
+                           if (nextIdx < exts.length) target.src = `/images/${formData.id}${exts[nextIdx]}`;
                            else target.style.display = 'none';
                          }} 
                          className="w-full h-full object-cover absolute inset-0 z-10" />

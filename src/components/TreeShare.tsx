@@ -1,4 +1,4 @@
-// src/components/TreeShare.tsx
+// src/components/TreeShare.tsx --version 3.1
 
 import React, { useMemo, useState, useEffect } from 'react';
 import { User, Target } from 'lucide-react';
@@ -72,7 +72,7 @@ export const MemberCardBase: React.FC<BaseCardProps> = ({
 }) => {
   const icon = person.gender === 'M' ? '♂' : '♀';
   const displayAvatar = useMemo(() => {
-    const localImg = localStorage.getItem(`mock_git_src/assets/images/${person.id}.webp`);
+    const localImg = localStorage.getItem(`public/images/${person.id}.webp`);
     if (localImg) {
       return localImg.startsWith('data:') ? localImg : `data:image/webp;base64,${localImg}`;
     }

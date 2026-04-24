@@ -1,4 +1,4 @@
-// src/components/AdminSetup.tsx
+// src/components/AdminSetup.tsx -- version 1.1
 import { useState } from 'react';
 import { encryptToken, hashPIN } from '../utils/security';
 
@@ -10,7 +10,10 @@ const AdminSetup = () => {
 
   const handleGenerate = () => {
     if (pat && pin.length === 6) {
-      const encrypted = encryptToken(pat, pin, salt);
+      // KẾT HỢP MUỐI KÉP KHI MÃ HÓA
+      const secretSalt = salt + (import.meta.env.VITE_APP_SALT || ""); 
+      const encrypted = encryptToken(pat, pin, secretSalt); // Đổi biến salt thành secretSalt
+      
       const hashed = hashPIN(pin);
       setResult({ encryptedToken: encrypted, hashedPin: hashed });
     } else {
