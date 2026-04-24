@@ -1,4 +1,4 @@
-// src/pages/Admin.tsx -- Version 5.5
+// src/pages/Admin.tsx -- Version 5.7
 
 import React, { useState, useEffect } from 'react';
 import { 
@@ -121,7 +121,7 @@ export const Admin: React.FC<AdminProps> = ({ onBack, globalMembers, setGlobalMe
     setIsLoadingLogs(true);
     setIsLogModalOpen(true);
     try {
-      const commits = await auth.service.getCommits('data.json', 30);
+      const commits = await auth.service.getCommits('public/data.json', 30);
       setAuditLogs(commits);
     } catch (err) {
       alert("Không thể tải lịch sử!");
@@ -169,9 +169,9 @@ export const Admin: React.FC<AdminProps> = ({ onBack, globalMembers, setGlobalMe
       if (exists) newFullList = newFullList.map(m => m.id === finalMember.id ? finalMember : m);
       else newFullList.push(finalMember);
 
-      const currentFile = await auth.service.getFile('data.json');
+      const currentFile = await auth.service.getFile('public/data.json');
       const logMessage = `[${exists ? "Sửa" : "Thêm"}] ${finalMember.fullName} - Bởi: ${getActionAuthor()}`;
-      await auth.service.updateFile('data.json', { ...currentFile?.content, members: newFullList }, currentFile?.sha, logMessage);
+      await auth.service.updateFile('public/data.json', { ...currentFile?.content, members: newFullList }, currentFile?.sha, logMessage);
 
       setGlobalMembers(newFullList);
       setEditingMember(null);
@@ -189,13 +189,13 @@ export const Admin: React.FC<AdminProps> = ({ onBack, globalMembers, setGlobalMe
     setIsSaving(true);
     setLoadingText("Đang xóa dữ liệu...");
     try {
-      const currentFile = await auth.service.getFile('data.json');
+      const currentFile = await auth.service.getFile('public/data.json');
       const memberToDelete = globalMembers.find(m => m.id === id);
       let updatedList = globalMembers.filter(m => m.id !== id).map(m => ({
         ...m, spouses: m.spouses?.filter((s: any) => s.id !== id)
       }));
 
-      await auth.service.updateFile('data.json', { ...currentFile?.content, members: updatedList }, currentFile?.sha, `[Xóa] ${memberToDelete?.fullName} - Bởi: ${getActionAuthor()}`);
+      await auth.service.updateFile('public/data.json', { ...currentFile?.content, members: updatedList }, currentFile?.sha, `[Xóa] ${memberToDelete?.fullName} - Bởi: ${getActionAuthor()}`);
       setGlobalMembers(updatedList);
       setEditingMember(null);
       setFormMode(null);
@@ -226,14 +226,14 @@ export const Admin: React.FC<AdminProps> = ({ onBack, globalMembers, setGlobalMe
       if (!window.confirm(`Xác nhận THU HỒI quyền của [${member.fullName}]?`)) return;
       setIsSaving(true);
       try {
-        const configFile = await auth.service.getFile('config.json');
+        const configFile = await auth.service.getFile('public/config.json');
         const newConfig = JSON.parse(JSON.stringify(configFile?.content || config));
         const currentMods = newConfig.permissions.mods;
         const modHashKey = Object.keys(currentMods).find(key => currentMods[key].rootId === member.id);
         
         if (modHashKey) {
           delete currentMods[modHashKey]; 
-          await auth.service.updateFile('config.json', newConfig, configFile?.sha, `[Thu hồi] Mod: ${member.fullName} - Bởi: TRƯỞNG TỘC`);
+          await auth.service.updateFile('public/config.json', newConfig, configFile?.sha, `[Thu hồi] Mod: ${member.fullName} - Bởi: TRƯỞNG TỘC`);
           setConfig(newConfig); 
           alert("✅ Đã thu hồi quyền.");
         }
@@ -250,14 +250,14 @@ export const Admin: React.FC<AdminProps> = ({ onBack, globalMembers, setGlobalMe
       const newPin = Math.floor(100000 + Math.random() * 900000).toString();
       const secretSalt = config.auth.salt + (import.meta.env.VITE_APP_SALT || "");
       const encryptedTokenForMod = encryptToken(auth.rawToken, newPin, secretSalt);
-      const configFile = await auth.service.getFile('config.json');
+      const configFile = await auth.service.getFile('public/config.json');
       const newConfig = JSON.parse(JSON.stringify(configFile?.content || config));
       
       newConfig.permissions.mods[hashPIN(newPin)] = { 
         rootId: modModal.member.id, name: modModal.modName, token: encryptedTokenForMod 
       };
       
-      await auth.service.updateFile('config.json', newConfig, configFile?.sha, `[Cấp quyền] Mod: ${modModal.modName} - Bởi: TRƯỞNG TỘC`);
+      await auth.service.updateFile('public/config.json', newConfig, configFile?.sha, `[Cấp quyền] Mod: ${modModal.modName} - Bởi: TRƯỞNG TỘC`);
       setConfig(newConfig); 
       setModModal({ ...modModal, step: 2, generatedPin: newPin });
     } catch (err) { alert("Lỗi cấp quyền!"); } finally { setIsSaving(false); }
@@ -267,7 +267,7 @@ export const Admin: React.FC<AdminProps> = ({ onBack, globalMembers, setGlobalMe
     if (!auth || auth.role !== 'super' || isOffline) return;
     setIsSaving(true);
     try {
-      const path = `src/backups/data_${new Date().toISOString().replace(/[:.]/g, '-')}.json`;
+      const path = `public/backups/data_${new Date().toISOString().replace(/[:.]/g, '-')}.json`;
       await auth.service.updateFile(path, { members: globalMembers }, undefined, `[Backup] Bởi: TRƯỞNG TỘC`);
       alert(`✅ Đã sao lưu Cloud!`);
     } catch (err) { alert("Lỗi sao lưu!"); } finally { setIsSaving(false); }
@@ -285,9 +285,9 @@ export const Admin: React.FC<AdminProps> = ({ onBack, globalMembers, setGlobalMe
     if (!auth || isOffline) return;
     setIsSaving(true);
     try {
-      const currentFile = await auth.service.getFile('data.json');
+      const currentFile = await auth.service.getFile('public/data.json');
       const updatedData = { ...currentFile?.content, metadata: { ...currentFile?.content?.metadata, aboutFamily: about, familyName: name, familyPhotos: photos.filter(p => p.url.trim() !== "") } };
-      await auth.service.updateFile('data.json', updatedData, currentFile?.sha, `[Cài đặt] Cập nhật Tộc phả - Bởi: TRƯỞNG TỘC`);
+      await auth.service.updateFile('public/data.json', updatedData, currentFile?.sha, `[Cài đặt] Cập nhật Tộc phả - Bởi: TRƯỞNG TỘC`);
       setGlobalMembers(updatedData.members); 
       setIsFamilyModalOpen(false);
       alert("✅ Đã cập nhật!");
@@ -303,8 +303,8 @@ export const Admin: React.FC<AdminProps> = ({ onBack, globalMembers, setGlobalMe
       try {
         const data = JSON.parse(event.target?.result as string);
         setIsSaving(true);
-        const currentFile = await auth.service.getFile('data.json');
-        await auth.service.updateFile('data.json', data, currentFile?.sha, `[Khôi phục] Dữ liệu từ File - Bởi: TRƯỞNG TỘC`);
+        const currentFile = await auth.service.getFile('public/data.json');
+        await auth.service.updateFile('public/data.json', data, currentFile?.sha, `[Khôi phục] Dữ liệu từ File - Bởi: TRƯỞNG TỘC`);
         setGlobalMembers(data.members); alert("✅ Khôi phục thành công!");
       } catch (err) { alert("Lỗi tệp!"); } finally { setIsSaving(false); }
     };

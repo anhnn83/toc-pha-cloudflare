@@ -28,7 +28,7 @@ jobs:
             # Chỉ cho phép thay đổi data.json, config.json và các tệp trong thư mục images
             if [[ ! "$file" =~ ^public/data\.json$ ]] && \
                [[ ! "$file" =~ ^public/config\.json$ ]] && \
-               [[ ! "$file" =~ ^src/assets/images/.* ]]; then
+               [[ ! "$file" =~ ^public/images/.* ]]; then
               
               echo "❌ CẢNH BÁO BẢO MẬT: Phát hiện thay đổi trái phép tại tệp: $file"
               echo "Hệ thống chỉ cho phép cập nhật Dữ liệu và Hình ảnh."
