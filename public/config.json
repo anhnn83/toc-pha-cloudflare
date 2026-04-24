@@ -1,0 +1,10 @@
+{
+  "auth": {
+    "encryptedToken": "U2FsdGVkX19edpskcj+eTlviicVLIDuuy2NmXg9bK+13K6aEntLM/fmuVluMcsm2zrnmutDSkuozkp4PRSEtqw==", 
+    "salt": "gia-toc-nguyen-2026"
+  },
+  "permissions": {
+    "super": ["2785c01afc2839271f12de2402185ae25033643519ff824974ad6210e6e78ee9"],
+    "mods": {}
+  }
+}
