@@ -1,10 +1,10 @@
 {
   "auth": {
-    "encryptedToken": "U2FsdGVkX1+K48pGZ9Jit4AbpIRCsH84I0n6YxrFQUScdc2p9J4REE4CPgEzpJFPSZYK/Pw51hj/kGRbRoIJ6g==", 
+    "encryptedToken": "U2FsdGVkX1/Ry+uQDkAkHLpavog5S+j3HJjgqsGJvBKog9hdi4cke4tVUTa5z6PMWTAHda6gUIhjV24udnSzHw==", 
     "salt": "gia-toc-nguyen-2026"
   },
   "permissions": {
-    "super": ["303aef314b37c564654c396a26db3fc485c072a7fdadfd116b4440d9e2f16f08"],
+    "super": ["2785c01afc2839271f12de2402185ae25033643519ff824974ad6210e6e78ee9"],
     "mods": {}
   }
 }
