@@ -1,5 +1,5 @@
 // src/components/AdminSetup.tsx
-import React, { useState } from 'react';
+import { useState } from 'react';
 import { encryptToken, hashPIN } from '../utils/security';
 
 const AdminSetup = () => {
