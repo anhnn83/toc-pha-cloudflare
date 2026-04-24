@@ -55,6 +55,8 @@ export const Admin: React.FC<AdminProps> = ({ onBack, globalMembers, setGlobalMe
   }, []);
 
   const handleLogin = () => {
+    // Thêm vào trong hàm handleLogin của Admin.tsx để test
+    console.log("Độ dài Salt trên Vercel:", (import.meta.env.VITE_APP_SALT || "").length);
     if (!config) return;
     if (isOffline) { setError("Vui lòng kết nối mạng!"); return; }
 
