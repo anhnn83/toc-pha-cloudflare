@@ -1,4 +1,4 @@
-// src/pages/Admin.tsx -- Version 5.3 (Tích hợp tính năng PWA & Chế độ Offline)
+// src/pages/Admin.tsx -- Version 5.4 (Bảo mật đa tầng)
 
 import React, { useState, useEffect } from 'react';
 import { 
@@ -23,6 +23,9 @@ export const Admin: React.FC<AdminProps> = ({ onBack, globalMembers, setGlobalMe
   const [pin, setPin] = useState('');
   const [config, setConfig] = useState<any>(null);
   const [error, setError] = useState<string | null>(null);
+
+  const [attempts, setAttempts] = useState(0);
+  const [lockUntil, setLockUntil] = useState<number | null>(null);
   
   const [editingMember, setEditingMember] = useState<any>(null);
   const [formMode, setFormMode] = useState<'edit' | 'add' | null>(null);
@@ -53,8 +56,12 @@ export const Admin: React.FC<AdminProps> = ({ onBack, globalMembers, setGlobalMe
 
   const handleLogin = () => {
     if (!config) return;
-    if (isOffline) {
-      setError("Vui lòng kết nối mạng để đăng nhập!");
+    if (isOffline) { setError("Vui lòng kết nối mạng!"); return; }
+
+    // 1. Kiểm tra trạng thái khóa (Cooldown)
+    if (lockUntil && Date.now() < lockUntil) {
+      const remaining = Math.ceil((lockUntil - Date.now()) / 1000);
+      setError(`Hệ thống đang khóa. Thử lại sau ${remaining} giây.`);
       return;
     }
 
@@ -70,15 +77,37 @@ export const Admin: React.FC<AdminProps> = ({ onBack, globalMembers, setGlobalMe
     }
 
     if (role) {
+      // 2. Giải mã với Double Salt: Kết hợp Salt trong file và Salt từ Vercel
+      const secretSalt = config.auth.salt + (import.meta.env.VITE_APP_SALT || "");
       const tokenToDecrypt = (role === 'mod' && userData.token) ? userData.token : config.auth.encryptedToken;
-      const rawToken = decryptToken(tokenToDecrypt, pin, config.auth.salt);
+      const rawToken = decryptToken(tokenToDecrypt, pin, secretSalt);
       
       if (rawToken) {
         setAuth({ service: new GitHubService(rawToken), role, user: userData, rawToken });
         setError(null);
+        setAttempts(0); // Reset số lần thử khi thành công
         setPin('');
-      } else { setError("Mã PIN không thể giải mã!"); }
-    } else { setError("Mã PIN không đúng!"); }
+      } else { 
+        handleFailedAttempt();
+        setError("Mã PIN đúng nhưng không thể giải mã dữ liệu!"); 
+      }
+    } else { 
+      handleFailedAttempt();
+    }
+  };
+
+  // Hàm xử lý khi nhập sai
+  const handleFailedAttempt = () => {
+    const newAttempts = attempts + 1;
+    setAttempts(newAttempts);
+    if (newAttempts >= 5) {
+      // Khóa tăng dần: 30s, 60s, 120s...
+      const waitTime = Math.pow(2, newAttempts - 5) * 30 * 1000; 
+      setLockUntil(Date.now() + waitTime);
+      setError(`Sai quá nhiều lần! Hệ thống tạm khóa ${waitTime/1000} giây.`);
+    } else {
+      setError(`Mã PIN không đúng! (Còn ${5 - newAttempts} lần thử)`);
+    }
   };
 
   const handleOpenLogs = async () => {
