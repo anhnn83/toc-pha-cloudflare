@@ -1,7 +1,7 @@
-// src/components/MemberForm.tsx -- version 3.4 (Strict Relation Constraints)
+// src/components/MemberForm.tsx -- version 3.6 (Dynamic Contextual Constraints)
 
 import React, { useState, useEffect, useRef, useMemo } from 'react';
-import { Save, X, Trash2, HelpCircle, UploadCloud, User, Loader2, AlertCircle } from 'lucide-react';
+import { Save, X, Trash2, HelpCircle, UploadCloud, User, Loader2, AlertCircle, Info } from 'lucide-react';
 import { getNextSolarAnniversary } from '../utils/lunarUtils';
 
 interface MemberFormProps {
@@ -46,17 +46,21 @@ const parseLunarDate = (dateStr?: string | null) => {
 
 const MemberForm: React.FC<MemberFormProps> = ({ member, allMembers, onSave, onCancel, onDelete, isNew, authorInfo }) => {
   
-  // --- LOGIC NHẬN DIỆN VÀ RÀNG BUỘC QUAN HỆ (V3.4) ---
+  // --- LOGIC KHÓA KIỂU QUAN HỆ (V3.5 & V3.6) ---
   const CHILD_TYPES = ['biological', 'adopted', 'step'];
   const foundSpouseTarget = allMembers.find(m => m.spouses?.some((s: any) => s.id === member.id));
   
-  const isActuallyInLaw = !!foundSpouseTarget || !!member._bloodlineSpouseId || ['current', 'divorced'].includes(member.relation_status);
+  // 1. Dấu hiệu chắc chắn là Dâu/Rể (Kể cả khi Đang Thêm Mới)
+  const isActuallyInLaw = !!foundSpouseTarget || !!member._bloodlineSpouseId || ['current', 'divorced', 'in_law'].includes(member.relation_status);
+  
+  // 2. Dấu hiệu chắc chắn là Con (Kể cả khi Đang Thêm Mới)
+  const isActuallyChild = !isActuallyInLaw && (!!member.father_id || !!member.mother_id || CHILD_TYPES.includes(member.relation_status));
+
   const initRelationStatus = isActuallyInLaw ? 'in_law' : (member.relation_status || member.relationType || 'biological');
 
-  // TH1: Đã là con -> Không thể thành Dâu/Rể
-  const isLockedAsChild = !isNew && CHILD_TYPES.includes(member.relation_status);
-  // TH2: Đã là Dâu/Rể -> Không thể thành con
-  const isLockedAsInLaw = !isNew && (member.relation_status === 'in_law' || isActuallyInLaw);
+  // KHÓA TUYỆT ĐỐI (KHÔNG CẦN BIẾT LÀ THÊM MỚI HAY SỬA)
+  const isLockedAsChild = isActuallyChild;
+  const isLockedAsInLaw = isActuallyInLaw;
 
   const [formData, setFormData] = useState<any>({
     id: member.id || '',
@@ -342,19 +346,32 @@ const MemberForm: React.FC<MemberFormProps> = ({ member, allMembers, onSave, onC
                   <option value="adopted">Con nuôi</option>
                   <option value="step">Con riêng</option>
                   <option value="in_law" disabled={isLockedAsChild}>
-                    {isLockedAsChild ? 'Dâu / Rể (Không được chuyển đổi)' : 'Dâu / Rể'}
+                    {isLockedAsChild ? 'Dâu / Rể (Bị khóa)' : 'Dâu / Rể'}
                   </option>
                 </select>
+                
+                {/* HIỂN THỊ CẢNH BÁO TƯƠNG TÁC ĐỘNG TÙY THEO NGỮ CẢNH THÊM MỚI/SỬA */}
                 {isLockedAsChild && (
-                  <p className="text-[10px] text-red-500 mt-1 font-bold flex items-center gap-1">
-                    <AlertCircle size={12} /> Không thể chuyển thành viên trực hệ thành Dâu/Rể
+                  <p className={`text-[10px] mt-1 font-bold flex items-center gap-1 ${isNew ? 'text-blue-600' : 'text-red-500'}`}>
+                    {isNew ? <Info size={12} /> : <AlertCircle size={12} />} 
+                    {isNew && parentInfo 
+                      ? `Đang thêm Con cho ${parentInfo.bloodline.gender === 'M' ? 'Ông' : 'Bà'} ${parentInfo.bloodline.full_name || parentInfo.bloodline.fullName}`
+                      : 'Không thể chuyển đổi Con thành Dâu/Rể'}
                   </p>
                 )}
                 {isLockedAsInLaw && (
-                   <p className="text-[10px] text-stone-400 mt-1 font-bold flex items-center gap-1">
-                    <AlertCircle size={12} /> Thành viên ngoại tộc không thể chuyển thành con trực hệ
+                   <p className={`text-[10px] mt-1 font-bold flex items-center gap-1 ${isNew ? 'text-pink-600' : 'text-stone-400'}`}>
+                    {isNew ? <Info size={12} /> : <AlertCircle size={12} />} 
+                    {isNew && formData._bloodlineSpouseId ? (() => {
+                       const spouse = allMembers.find(m => m.id === formData._bloodlineSpouseId);
+                       const title = spouse?.gender === 'M' ? 'Ông' : 'Bà';
+                       const name = spouse?.full_name || spouse?.fullName || '';
+                       const role = formData.gender === 'F' ? 'Dâu (Vợ)' : 'Rể (Chồng)';
+                       return `Đang thêm ${role} của ${title} ${name}`;
+                    })() : 'Không thể chuyển đổi Dâu/Rể thành Con'}
                   </p>
                 )}
+
               </div>
 
               {!isInLawUI && (
