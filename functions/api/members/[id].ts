@@ -1,4 +1,4 @@
-// /functions/api/members/[id].ts -- version 1.8 (Final Sync & R2 Fix)
+// /functions/api/members/[id].ts -- version 1.9 (Fixed Mod In-Law Boundary Validation)
 
 interface Env {
   DB: D1Database;
@@ -40,7 +40,7 @@ export const onRequestPut: PagesFunction<Env, "id", { user: any }> = async (cont
       input.avatar_url || null, input.rank_in_family || 1, memberId
     ).run();
 
-    // Dọn dẹp R2 nếu thay đổi ảnh trực tiếp trong hồ sơ.ts]
+    // Dọn dẹp R2 nếu thay đổi ảnh trực tiếp trong hồ sơ
     if (oldAvatarUrl && oldAvatarUrl !== input.avatar_url) {
       const fileName = oldAvatarUrl.split('/').pop()?.split('?')[0];
       if (fileName) {
@@ -54,7 +54,6 @@ export const onRequestPut: PagesFunction<Env, "id", { user: any }> = async (cont
           currentBytes = Math.max(0, currentBytes - deletedSize);
           const newSizeMB = (currentBytes / (1024 * 1024)).toFixed(2) + " MB";
 
-          // Cập nhật dùng cú pháp đồng bộ với upload.ts
           await env.DB.prepare("INSERT INTO system_settings (key, value) VALUES ('r2_storage_bytes', ?) ON CONFLICT(key) DO UPDATE SET value = excluded.value").bind(currentBytes.toString()).run();
           await env.DB.prepare("INSERT INTO system_settings (key, value) VALUES ('r2_storage_size', ?) ON CONFLICT(key) DO UPDATE SET value = excluded.value").bind(newSizeMB).run();
         }
@@ -91,7 +90,7 @@ export const onRequestDelete: PagesFunction<Env, "id", { user: any }> = async (c
       if (!isInBranch) return new Response(JSON.stringify({ error: "Không thuộc nhánh quản lý" }), { status: 403 });
     }
 
-    // GIAI ĐOẠN 1: ĐANG HOẠT ĐỘNG -> VÀO THÙNG RÁC (GIỮ LẠI ẢNH ĐỂ KHÔI PHỤC).ts]
+    // GIAI ĐOẠN 1: ĐANG HOẠT ĐỘNG -> VÀO THÙNG RÁC (GIỮ LẠI ẢNH ĐỂ KHÔI PHỤC)
     if (member.is_deleted === 0) {
       const hasChildren = await env.DB.prepare(
         "SELECT id FROM members WHERE (father_id = ? OR mother_id = ?) AND is_deleted = 0 LIMIT 1"
@@ -106,30 +105,23 @@ export const onRequestDelete: PagesFunction<Env, "id", { user: any }> = async (c
       return new Response(JSON.stringify({ success: true, message: "Đã đưa vào thùng rác." }));
     }
 
-    // GIAI ĐOẠN 2: TRONG THÙNG RÁC -> XÓA VĨNH VIỄN & R2 (CHỈ SM).ts]
+    // GIAI ĐOẠN 2: TRONG THÙNG RÁC -> XÓA VĨNH VIỄN & R2 (CHỈ SM)
     if (member.is_deleted === 1) {
       if (user.role !== "sm" && user.role !== "super") {
         return new Response(JSON.stringify({ error: "Chỉ Trưởng tộc mới được xóa vĩnh viễn" }), { status: 403 });
       }
 
-      // Xử lý dọn dẹp R2 vật lý
       if (member.avatar_url) {
-        // TRÍCH XUẤT TÊN FILE CHUẨN (Loại bỏ ?v=...).ts]
         const fileName = member.avatar_url.split('/').pop()?.split('?')[0];
-        
         if (fileName) {
           const objectMetadata = await env.BUCKET.head(fileName);
-          
           if (objectMetadata) {
             const fileSize = objectMetadata.size;
             
-            // Xóa file trên R2
             await env.BUCKET.delete(fileName);
 
-            // Cập nhật dung lượng chính xác vào DB.ts]
             const currentBytesRow = await env.DB.prepare("SELECT value FROM system_settings WHERE key = 'r2_storage_bytes'").first() as any;
             let currentBytes = currentBytesRow ? parseInt(currentBytesRow.value, 10) : 0;
-            
             currentBytes = Math.max(0, currentBytes - fileSize);
             const newSizeMB = (currentBytes / (1024 * 1024)).toFixed(2) + " MB";
 
@@ -139,7 +131,6 @@ export const onRequestDelete: PagesFunction<Env, "id", { user: any }> = async (c
         }
       }
 
-      // Xóa sổ vĩnh viễn khỏi Database
       await env.DB.prepare("DELETE FROM members WHERE id = ?").bind(memberId).run();
       await env.DB.prepare("INSERT INTO audit_logs (author_name, action, target_name) VALUES (?, ?, ?)")
         .bind(authorName, "Xóa vĩnh viễn", member.full_name).run();
@@ -156,15 +147,30 @@ export const onRequestDelete: PagesFunction<Env, "id", { user: any }> = async (c
 
 async function verifyBranchBoundary(db: D1Database, targetId: string, branchRootId: string): Promise<boolean> {
   if (targetId === branchRootId) return true;
+  
+  // BẢN VÁ: Mở rộng điểm xuất phát bao gồm cả Vợ/Chồng của targetId
   const query = `
     WITH RECURSIVE ancestors AS (
+      -- 1. Điểm xuất phát: Bản thân người đó
       SELECT id, father_id, mother_id FROM members WHERE id = ?
+      
+      UNION
+      
+      -- 2. Điểm xuất phát bổ sung: Vợ/Chồng của người đó (Giải quyết bài toán Dâu/Rể)
+      SELECT m.id, m.father_id, m.mother_id 
+      FROM members m
+      INNER JOIN marriages mr ON (m.id = mr.member_id AND mr.spouse_id = ?) OR (m.id = mr.spouse_id AND mr.member_id = ?)
+      
       UNION ALL
+      
+      -- 3. Đệ quy: Đi dọc lên cha mẹ để tìm gốc
       SELECT m.id, m.father_id, m.mother_id FROM members m
-      JOIN ancestors a ON m.id = a.father_id OR m.id = a.mother_id
+      INNER JOIN ancestors a ON m.id = a.father_id OR m.id = a.mother_id
     )
     SELECT 1 FROM ancestors WHERE id = ? LIMIT 1
   `;
-  const result = await db.prepare(query).bind(targetId, branchRootId).first();
+  
+  // Truyền targetId vào 3 vị trí dấu hỏi đầu tiên, và branchRootId vào dấu hỏi cuối cùng
+  const result = await db.prepare(query).bind(targetId, targetId, targetId, branchRootId).first();
   return !!result;
 }

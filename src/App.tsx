@@ -1,4 +1,4 @@
-// src/App.tsx -- version 2.4 (Fix TS Warnings & Imports)
+// src/App.tsx -- version 2.5 (Fixed Header Responsive Layout & Line Clamp)
 
 import { useEffect, useState, useCallback } from 'react';
 import { Users, ShieldCheck, TreeDeciduous, CircleAlert, Info, Crown, Lock, Loader2 } from 'lucide-react';
@@ -150,15 +150,31 @@ function App() {
 
   return (
     <div className="fixed inset-0 bg-[#f8f7f5] flex flex-col overflow-hidden font-sans select-none">
-      <header className="bg-white p-4 shadow-sm text-center border-b-2 border-stone-200 z-30 flex items-center justify-center gap-3">
-        <h1 className="text-lg font-black text-[#704214] flex flex-wrap items-center justify-center gap-2 tracking-tighter uppercase">
-          <TreeDeciduous size={24} /> {familyName}
-        </h1>
-        {!isOffline ? (
-          <span className="text-[9px] bg-green-50 text-green-700 px-2 py-1 rounded-md font-black border border-green-200 uppercase tracking-widest ml-1 shadow-sm"><span className="animate-pulse inline-block mr-1">●</span> Live</span>
-        ) : (
-          <span className="text-[9px] bg-amber-50 text-amber-700 px-2 py-1 rounded-md border border-amber-200 uppercase tracking-widest ml-1 font-black shadow-sm">📴 Offline</span>
-        )}
+      
+      {/* BẢN VÁ: Tối ưu UI Header (Giới hạn 2 dòng tiêu đề, ghim nút Live sang phải) */}
+      <header className="bg-white p-3 sm:p-4 shadow-sm border-b-2 border-stone-200 z-30 flex items-center justify-center relative min-h-[64px] shrink-0">
+        
+        {/* Khu vực Tiêu đề (Bị ép tối đa 2 dòng bằng line-clamp-2) */}
+        <div className="flex flex-col sm:flex-row items-center justify-center gap-1 sm:gap-2 w-full max-w-[65vw] sm:max-w-2xl px-2">
+          <TreeDeciduous size={24} className="text-[#704214] shrink-0" />
+          <h1 className="text-base sm:text-lg font-black text-[#704214] tracking-tighter uppercase line-clamp-2 overflow-hidden leading-tight text-center">
+            {familyName}
+          </h1>
+        </div>
+        
+        {/* Chốt cố định Huy hiệu Trạng thái ở góc phải */}
+        <div className="absolute right-4 top-1/2 -translate-y-1/2">
+          {!isOffline ? (
+            <span className="text-[9px] sm:text-[10px] bg-green-50 text-green-700 px-2 py-1.5 rounded-md font-black border border-green-200 uppercase tracking-widest shadow-sm flex items-center">
+              <span className="animate-pulse inline-block mr-1">●</span> Live
+            </span>
+          ) : (
+            <span className="text-[9px] sm:text-[10px] bg-amber-50 text-amber-700 px-2 py-1.5 rounded-md border border-amber-200 uppercase tracking-widest font-black shadow-sm flex items-center">
+              📴 Offline
+            </span>
+          )}
+        </div>
+
       </header>
 
       <main className="flex-1 relative overflow-hidden bg-[#f8f7f5]">
