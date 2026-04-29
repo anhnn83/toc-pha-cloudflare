@@ -4,9 +4,10 @@ import React, { useState } from 'react';
 import { 
   BookOpen, Info, Smartphone, ShieldCheck, 
   Cpu, Mail, Phone, Image as ImageIcon, X, 
-  Cloud, Trash2, History,
+  Cloud, Trash2, History, Database,
   Search,
-  Atom
+  Atom,
+  LayoutDashboard
 } from 'lucide-react';
 
 interface PhotoItem {
@@ -84,9 +85,9 @@ const About: React.FC<AboutProps> = ({ aboutFamily, familyPhotos = [] }) => {
             <div className="bg-white p-5 rounded-2xl border border-stone-100 shadow-sm">
               <p className="font-bold text-sm text-stone-800 mb-2 flex items-center gap-2"><Cloud size={16} className="text-blue-500"/>Thân thiện & thuận tiện</p>
               <ul className="text-xs text-stone-500 space-y-2 list-disc pl-4">
-                <li>Các tính năng độc đáo: phân quyền quản trị theo chi họ, tìm ngày giỗ gần nhất theo dương lịch, xác định đích tôn...</li>
-                <li>Có thể cài đặt trực tiếp ứng dụng lên màn hình chính của điện thoại (<b>Add to Home Screen</b>) để tiện truy xuất.</li>
-                <li>An toàn, miễn phí đăng tải & duy trì hoạt động nhờ tuân thủ & áp dụng các chính sách phù hợp của <b>Cloudflare</b>.</li>
+                <li>Các tính năng độc đáo: phân quyền quản trị nhánh, tính ngày giỗ gần nhất theo dương lịch, xác định đích tôn...</li>
+                <li>Có thể cài đặt trực tiếp ứng dụng lên màn hình chính của điện thoại <b>[+]Add to Home Screen</b> để thuận tiện theo dõi.</li>
+                <li>An toàn, miễn phí đăng tải & duy trì hoạt động nhờ tuân thủ & áp dụng tối ưu các chính sách của <b>Cloudflare</b>.</li>
               </ul>
             </div>
             <div className="bg-white p-5 rounded-2xl border border-stone-100 shadow-sm">
@@ -109,21 +110,38 @@ const About: React.FC<AboutProps> = ({ aboutFamily, familyPhotos = [] }) => {
               <div className="p-2 bg-blue-50 rounded-lg text-blue-600 shrink-0"><ShieldCheck size={20}/></div>
               <div>
                 <p className="font-black text-blue-800 uppercase text-[10px] mb-1">Quyền uy Trưởng tộc (SM)</p>
-                <p className="text-xs">Quản trị toàn bộ dữ liệu: thiết lập bảo mật toàn cục, tạo & quản lý danh sách Mod, sao lưu/khôi phục hệ thống...</p>
+                {/* <p className="text-xs">Quản trị toàn bộ dữ liệu, thiết lập bảo mật toàn cục, tạo & quản lý danh sách Mod, sao lưu/khôi phục hệ thống...</p> */}
+                <p className="text-xs flex items-center gap-1 whitespace-nowrap">
+                  <Database size={12} className="shrink-0" /> 
+                  <span><b>Cây gia phả</b> - Thêm/xóa/chỉnh sửa thành viên, ⚡Phân quyền quản trị nhánh chi họ.</span>
+                </p>                
+                <p className="text-xs flex items-center gap-1 whitespace-nowrap">
+                  <ShieldCheck size={12} className="shrink-0" /> 
+                  <span><b>Mod & Bảo mật</b> - Thêm/xóa Mod, thiết lập ViewPIN, ModPIN, đổi mã PIN.</span>
+                </p>
+                <p className="text-xs flex items-center gap-1 whitespace-nowrap">
+                  <ImageIcon size={12} className="shrink-0" /> 
+                  <span><b>Trang giới thiệu</b> - Cập nhật thông tin, hình ảnh chung của gia tộc.</span>
+                </p>
+                <p className="text-xs flex items-center gap-1 whitespace-nowrap">
+                  <LayoutDashboard size={12} className="shrink-0" /> 
+                  <span><b>Hệ thống</b> - Thùng rác (xóa 2 lớp), Sao lưu/Phục hồi dữ liệu, xem Nhật ký hệ thống.</span>
+                </p>
               </div>
             </div>
             <div className="flex gap-4 items-start">
               <div className="p-2 bg-violet-50 rounded-lg text-pink-400 shrink-0"><Atom size={20}/></div>
               <div>
                 <p className="font-black text-pink-400 uppercase text-[10px] mb-1">Quản trị phân nhánh (Mod)</p>
-                <p className="text-xs">Trưởng tộc có thể tạo ra nhiều Mod để hỗ trợ quản trị các thành viên trong nhánh chi họ.</p>
+                <p className="text-xs">Trưởng tộc có thể phân quyền (⚡) cho nhiều Mod để hỗ trợ quản trị các thành viên trong nhánh chi họ.</p>
+                <p className="text-xs">Nút trên thẻ Thành viên: 📝 Chỉnh sửa hồ sơ - 👧/👦 Thêm Vợ/Chồng - 👶🏻 Thêm con cái</p>
               </div>
             </div>
             <div className="flex gap-4 items-start">
               <div className="p-2 bg-amber-50 rounded-lg text-amber-600 shrink-0"><Trash2 size={20}/></div>
               <div>
                 <p className="font-black text-amber-800 uppercase text-[10px] mb-1">An toàn dữ liệu</p>
-                <p className="text-xs">Xóa dữ liệu 2 cấp an toàn, cơ chế backup & restore DB nhanh chóng, hạn chế người truy cập bằng mã PIN... </p>
+                <p className="text-xs">Xóa dữ liệu 2 cấp an toàn, cơ chế Sao lưu & Phục hồi toàn bộ CSDL nhanh chóng, hạn chế truy cập bằng mã PIN và IP. </p>
               </div>
             </div>
             <div className="flex gap-4 items-start">
