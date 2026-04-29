@@ -1,7 +1,7 @@
-// src/components/MemberForm.tsx -- version 3.2
+// src/components/MemberForm.tsx -- version 3.4 (Strict Relation Constraints)
 
 import React, { useState, useEffect, useRef, useMemo } from 'react';
-import { Save, X, Trash2, HelpCircle, UploadCloud, User, Loader2 } from 'lucide-react';
+import { Save, X, Trash2, HelpCircle, UploadCloud, User, Loader2, AlertCircle } from 'lucide-react';
 import { getNextSolarAnniversary } from '../utils/lunarUtils';
 
 interface MemberFormProps {
@@ -45,12 +45,25 @@ const parseLunarDate = (dateStr?: string | null) => {
 };
 
 const MemberForm: React.FC<MemberFormProps> = ({ member, allMembers, onSave, onCancel, onDelete, isNew, authorInfo }) => {
+  
+  // --- LOGIC NHẬN DIỆN VÀ RÀNG BUỘC QUAN HỆ (V3.4) ---
+  const CHILD_TYPES = ['biological', 'adopted', 'step'];
+  const foundSpouseTarget = allMembers.find(m => m.spouses?.some((s: any) => s.id === member.id));
+  
+  const isActuallyInLaw = !!foundSpouseTarget || !!member._bloodlineSpouseId || ['current', 'divorced'].includes(member.relation_status);
+  const initRelationStatus = isActuallyInLaw ? 'in_law' : (member.relation_status || member.relationType || 'biological');
+
+  // TH1: Đã là con -> Không thể thành Dâu/Rể
+  const isLockedAsChild = !isNew && CHILD_TYPES.includes(member.relation_status);
+  // TH2: Đã là Dâu/Rể -> Không thể thành con
+  const isLockedAsInLaw = !isNew && (member.relation_status === 'in_law' || isActuallyInLaw);
+
   const [formData, setFormData] = useState<any>({
     id: member.id || '',
     full_name: member.full_name || member.fullName || '',
     alias: member.alias || member.nickname || '',
     gender: member.gender || 'M',
-    relation_status: member.relation_status || member.relationType || 'biological',
+    relation_status: initRelationStatus,
     is_alive: member.is_alive !== undefined ? member.is_alive : 1,
     father_id: member.father_id || null,
     mother_id: member.mother_id || null,
@@ -59,14 +72,13 @@ const MemberForm: React.FC<MemberFormProps> = ({ member, allMembers, onSave, onC
     notes: member.notes || member.note || '',
     avatar_url: member.avatar_url || null,
     rank_in_family: member.rank_in_family || member.siblingRank || 1,
-    _bloodlineSpouseId: member._bloodlineSpouseId || '',
-    _marriageStatus: member._marriageStatus || 'current'
+    _bloodlineSpouseId: member._bloodlineSpouseId || foundSpouseTarget?.id || '',
+    _marriageStatus: member._marriageStatus || (foundSpouseTarget ? foundSpouseTarget.spouses.find((s:any)=>s.id === member.id)?.status : null) || (['current', 'divorced'].includes(member.relation_status) ? member.relation_status : 'current')
   });
 
   const [birth, setBirth] = useState({ ...parseDateString(member.birthday), isApproximate: member.is_birth_approximate === 1 });
   const [death, setDeath] = useState({ ...parseDateString(member.death_date), isApproximate: member.is_death_approximate === 1 });
   
-  // State quản lý ngày giỗ Âm Lịch
   const initialLunar = parseLunarDate(member.lunar_death_date);
   const [lunarDeathDay, setLunarDeathDay] = useState(initialLunar.dd);
   const [lunarDeathMonth, setLunarDeathMonth] = useState(initialLunar.mm);
@@ -75,7 +87,6 @@ const MemberForm: React.FC<MemberFormProps> = ({ member, allMembers, onSave, onC
   const [isCompressing, setIsCompressing] = useState(false);
   const fileInputRef = useRef<HTMLInputElement>(null);
 
-  // Tính toán Preview Ngày giỗ Dương Lịch sắp tới
   const previewSolarAnniversary = useMemo(() => {
     if (lunarDeathDay && lunarDeathMonth && lunarDeathDay.length > 0 && lunarDeathMonth.length > 0) {
       return getNextSolarAnniversary(`${lunarDeathDay.padStart(2, '0')}/${lunarDeathMonth.padStart(2, '0')}`);
@@ -89,29 +100,6 @@ const MemberForm: React.FC<MemberFormProps> = ({ member, allMembers, onSave, onC
       setFormData((prev: any) => ({ ...prev, id: nextId, is_alive: 1 }));
     }
   }, [isNew, formData.id]);
-
-  useEffect(() => {
-      if (formData.relation_status === 'in_law') {
-      if (member._bloodlineSpouseId && !formData._bloodlineSpouseId) {
-        setFormData((prev: any) => ({ 
-          ...prev, 
-          _bloodlineSpouseId: member._bloodlineSpouseId,
-          _marriageStatus: member._marriageStatus || 'current'
-        }));
-      } 
-      else if (!formData._bloodlineSpouseId && !isNew) {
-        const spouseRelation = allMembers.find(m => m.spouses?.some((s: any) => s.id === formData.id));
-        if (spouseRelation) {
-          const relationDetail = spouseRelation.spouses.find((s: any) => s.id === formData.id);
-          setFormData((prev: any) => ({
-            ...prev,
-            _bloodlineSpouseId: spouseRelation.id,
-            _marriageStatus: relationDetail?.status || 'current'
-          }));
-        }
-      }
-    }
-  }, [formData.relation_status, member, allMembers, isNew]);
 
   const parentInfo = useMemo(() => {
     if (formData.relation_status === 'in_law') return null;
@@ -167,7 +155,6 @@ const MemberForm: React.FC<MemberFormProps> = ({ member, allMembers, onSave, onC
         ctx?.drawImage(img, 0, 0, width, height);
         setImagePreview(canvas.toDataURL('image/webp', 0.90));
         setIsCompressing(false);
-        // Khi up ảnh mới, đảm bảo avatar_url khác rỗng để backend biết
         setFormData((prev: any) => ({ ...prev, avatar_url: 'pending' })); 
       };
       img.src = event.target?.result as string;
@@ -175,12 +162,11 @@ const MemberForm: React.FC<MemberFormProps> = ({ member, allMembers, onSave, onC
     reader.readAsDataURL(file);
   };
 
-  // Logic Xóa Ảnh
   const handleRemoveImage = () => {
     setImagePreview(null);
-    setFormData((prev: any) => ({ ...prev, avatar_url: '' })); // Đánh dấu là đã xóa ảnh
+    setFormData((prev: any) => ({ ...prev, avatar_url: '' })); 
     if (fileInputRef.current) {
-        fileInputRef.current.value = ''; // Reset input file
+        fileInputRef.current.value = ''; 
     }
   };
 
@@ -206,15 +192,14 @@ const MemberForm: React.FC<MemberFormProps> = ({ member, allMembers, onSave, onC
         : null,
     };
 
-    // Truyền imagePreview. Nếu vừa xóa ảnh (avatar_url = ''), backend sẽ tự xử lý
     onSave(formattedData, imagePreview || undefined);
   };
   
   const isAlive = formData.is_alive === 1;
-  const isInLaw = formData.relation_status === 'in_law';
+  const isInLawUI = formData.relation_status === 'in_law';
 
   return (
-    <div className="fixed inset-0 z-50 bg-black/60 backdrop-blur-sm flex items-center justify-center p-4 sm:p-6">
+    <div className="fixed inset-0 z-[100] bg-black/60 backdrop-blur-sm flex items-center justify-center p-4 sm:p-6">
       <form onSubmit={handleSubmit} className="bg-white w-full max-w-3xl rounded-[2rem] shadow-2xl flex flex-col max-h-full overflow-hidden animate-in zoom-in-95">
         
         {/* HEADER */}
@@ -237,7 +222,6 @@ const MemberForm: React.FC<MemberFormProps> = ({ member, allMembers, onSave, onC
             <h4 className="text-xs font-black text-blue-800 border-b-2 border-blue-100 pb-2 uppercase flex items-center gap-2">Thông tin cơ bản</h4>
             <div className="flex flex-col sm:flex-row gap-6">
               
-              {/* KHU VỰC ẢNH ĐẠI DIỆN */}
               <div className="flex flex-col items-center gap-3 shrink-0">
                 <div className="w-28 h-28 rounded-3xl bg-stone-100 border-2 border-dashed border-stone-300 flex items-center justify-center overflow-hidden relative group">
                   {imagePreview ? (
@@ -251,7 +235,6 @@ const MemberForm: React.FC<MemberFormProps> = ({ member, allMembers, onSave, onC
                   </div>
                 </div>
                 <input type="file" accept="image/jpeg, image/png, image/webp" className="hidden" ref={fileInputRef} onChange={handleImageUpload} />
-                
                 <div className="flex flex-col w-full gap-2 mt-1">
                     <button type="button" onClick={() => fileInputRef.current?.click()} className="text-[10px] w-full justify-center font-black bg-stone-100 hover:bg-stone-200 px-3 py-2 rounded-lg flex items-center gap-1 uppercase transition-colors">
                       {isCompressing ? <Loader2 size={14} className="animate-spin" /> : 'Thay Ảnh'}
@@ -301,7 +284,6 @@ const MemberForm: React.FC<MemberFormProps> = ({ member, allMembers, onSave, onC
           <div className="space-y-4">
             <h4 className="text-xs font-black text-blue-800 border-b-2 border-blue-100 pb-2 uppercase">Thông tin Sinh / Tử</h4>
             <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 items-start">
-              
               <div className="p-4 rounded-xl border border-stone-200 bg-stone-50 space-y-3 h-full">
                 <label className="text-[10px] font-black text-stone-500 uppercase block">Ngày Sinh (DD/MM/YYYY)</label>
                 <div className="flex gap-2">
@@ -316,36 +298,14 @@ const MemberForm: React.FC<MemberFormProps> = ({ member, allMembers, onSave, onC
                 {!isAlive && (
                   <div className="bg-orange-50 p-4 rounded-xl border border-orange-100 relative shadow-sm animate-in fade-in">
                     <div className="flex justify-between items-center mb-3">
-                      <label className="text-[10px] font-black text-orange-800 uppercase tracking-widest">
-                        Ngày giỗ (Âm Lịch)
-                      </label>
-                      <span className="text-[10px] text-orange-600 font-bold italic">
-                        Tháng nhuận lấy tháng chính
-                      </span>
+                      <label className="text-[10px] font-black text-orange-800 uppercase tracking-widest">Ngày giỗ (Âm Lịch)</label>
+                      <span className="text-[10px] text-orange-600 font-bold italic">Tháng nhuận lấy tháng chính</span>
                     </div>
                     <div className="flex items-center gap-3">
-                      <input 
-                        type="text" 
-                        placeholder="DD" 
-                        maxLength={2}
-                        value={lunarDeathDay}
-                        onChange={(e) => setLunarDeathDay(e.target.value.replace(/\D/g, ''))}
-                        className="w-16 p-2 text-center border border-orange-200 rounded-lg text-sm bg-white focus:ring-2 focus:ring-orange-400 outline-none font-bold text-orange-900"
-                      />
+                      <input type="text" placeholder="DD" maxLength={2} value={lunarDeathDay} onChange={(e) => setLunarDeathDay(e.target.value.replace(/\D/g, ''))} className="w-16 p-2 text-center border border-orange-200 rounded-lg text-sm bg-white focus:ring-2 focus:ring-orange-400 outline-none font-bold text-orange-900" />
                       <span className="text-orange-400 font-black">/</span>
-                      <input 
-                        type="text" 
-                        placeholder="MM" 
-                        maxLength={2}
-                        value={lunarDeathMonth}
-                        onChange={(e) => setLunarDeathMonth(e.target.value.replace(/\D/g, ''))}
-                        className="w-16 p-2 text-center border border-orange-200 rounded-lg text-sm bg-white focus:ring-2 focus:ring-orange-400 outline-none font-bold text-orange-900"
-                      />
-                      <span className="text-xs text-orange-600 ml-2 italic">
-                        (VD: 10/03)
-                      </span>
+                      <input type="text" placeholder="MM" maxLength={2} value={lunarDeathMonth} onChange={(e) => setLunarDeathMonth(e.target.value.replace(/\D/g, ''))} className="w-16 p-2 text-center border border-orange-200 rounded-lg text-sm bg-white focus:ring-2 focus:ring-orange-400 outline-none font-bold text-orange-900" />
                     </div>
-                    
                     {previewSolarAnniversary && (
                       <div className="mt-3 text-[11px] font-bold text-blue-800 bg-blue-100/50 p-2 rounded-lg border border-blue-100 flex items-center gap-2">
                         <span>🗓️</span> Giỗ Dương lịch sắp tới: {previewSolarAnniversary}
@@ -353,7 +313,6 @@ const MemberForm: React.FC<MemberFormProps> = ({ member, allMembers, onSave, onC
                     )}
                   </div>
                 )}
-
                 <div className={`p-4 rounded-xl border space-y-3 transition-colors ${isAlive ? 'bg-stone-100 border-transparent opacity-60' : 'bg-stone-50 border-stone-200'}`}>
                   <label className="text-[10px] font-black text-stone-500 uppercase flex items-center gap-1">Ngày Mất Dương Lịch (Nếu Nhớ)</label>
                   <div className="flex gap-2">
@@ -374,19 +333,31 @@ const MemberForm: React.FC<MemberFormProps> = ({ member, allMembers, onSave, onC
               <div>
                 <label className="text-[10px] font-black text-stone-500 uppercase mb-1 flex items-center gap-1">* Kiểu quan hệ</label>
                   <select 
-                    className={`w-full p-3 rounded-xl border text-sm font-bold outline-none transition-colors ${isInLaw ? 'bg-stone-100 border-stone-200 text-stone-500 cursor-not-allowed' : 'bg-white border-blue-200 text-blue-900 focus:border-blue-500'}`} 
+                    className={`w-full p-3 rounded-xl border text-sm font-bold outline-none transition-colors ${isLockedAsInLaw ? 'bg-stone-100 border-stone-200 text-stone-500 cursor-not-allowed' : 'bg-white border-blue-200 text-blue-900 focus:border-blue-500'}`} 
                     value={formData.relation_status}
                     onChange={(e) => setFormData({...formData, relation_status: e.target.value})}
-                    disabled={isInLaw} 
+                    disabled={isLockedAsInLaw} 
                   >
                   <option value="biological">Con ruột</option>
                   <option value="adopted">Con nuôi</option>
-                  <option value="in_law">Dâu / Rể</option>
                   <option value="step">Con riêng</option>
+                  <option value="in_law" disabled={isLockedAsChild}>
+                    {isLockedAsChild ? 'Dâu / Rể (Không được chuyển đổi)' : 'Dâu / Rể'}
+                  </option>
                 </select>
+                {isLockedAsChild && (
+                  <p className="text-[10px] text-red-500 mt-1 font-bold flex items-center gap-1">
+                    <AlertCircle size={12} /> Không thể chuyển thành viên trực hệ thành Dâu/Rể
+                  </p>
+                )}
+                {isLockedAsInLaw && (
+                   <p className="text-[10px] text-stone-400 mt-1 font-bold flex items-center gap-1">
+                    <AlertCircle size={12} /> Thành viên ngoại tộc không thể chuyển thành con trực hệ
+                  </p>
+                )}
               </div>
 
-              {!isInLaw && (
+              {!isInLawUI && (
                   <div>
                     <label className="text-[10px] font-black text-stone-500 uppercase mb-1 flex items-center gap-1">Thứ tự trong nhà (Sinh thứ mấy) <HelpTooltip text="Giúp sắp xếp anh em trên cây từ trái qua phải." /></label>
                     <input type="number" className="w-full p-3 bg-stone-50 rounded-xl border border-stone-200 outline-none focus:border-blue-500" placeholder="Ví dụ: 1, 2..." value={formData.rank_in_family || ''} onChange={(e) => setFormData({...formData, rank_in_family: parseInt(e.target.value)})} />
@@ -396,45 +367,28 @@ const MemberForm: React.FC<MemberFormProps> = ({ member, allMembers, onSave, onC
               {parentInfo && (
                   <>
                     <div className="p-4 rounded-xl border bg-stone-50 border-stone-200">
-                        <label className="text-[10px] font-black text-stone-500 uppercase mb-2 block">
-                            * {parentInfo.bloodline.gender === 'M' ? 'Cha' : 'Mẹ'} (Người mang dòng họ)
-                        </label>
+                        <label className="text-[10px] font-black text-stone-500 uppercase mb-2 block">* {parentInfo.bloodline.gender === 'M' ? 'Cha' : 'Mẹ'} (Người mang dòng họ)</label>
                         <input disabled type="text" className="w-full p-3 bg-stone-200 rounded-lg border border-stone-300 font-bold text-sm text-stone-600" value={parentInfo.bloodline.full_name || parentInfo.bloodline.fullName} />
                     </div>
                     <div className="p-4 rounded-xl border bg-blue-50 border-blue-200">
-                        <label className="text-[10px] font-black text-blue-800 uppercase mb-2 flex items-center gap-1">
-                            * {parentInfo.otherRole === 'mother_id' ? 'Mẹ' : 'Cha'} (Khác họ) <HelpTooltip text="Chọn Không nếu là con riêng hoặc chưa rõ thông tin." />
-                        </label>
-                        <select 
-                            className="w-full p-3 bg-white rounded-lg border border-blue-200 font-bold text-sm outline-none focus:border-blue-500 text-blue-900"
-                            value={formData[parentInfo.otherRole] || ''}
-                            onChange={(e) => setFormData({...formData, [parentInfo.otherRole]: e.target.value })}
-                        >
+                        <label className="text-[10px] font-black text-blue-800 uppercase mb-2 flex items-center gap-1">* {parentInfo.otherRole === 'mother_id' ? 'Mẹ' : 'Cha'} (Khác họ) <HelpTooltip text="Chọn Không nếu là con riêng hoặc chưa rõ thông tin." /></label>
+                        <select className="w-full p-3 bg-white rounded-lg border border-blue-200 font-bold text-sm outline-none focus:border-blue-500 text-blue-900" value={formData[parentInfo.otherRole] || ''} onChange={(e) => setFormData({...formData, [parentInfo.otherRole]: e.target.value })}>
                             <option value="">-- KHÔNG (Con riêng / Chưa rõ) --</option>
-                            {parentInfo.spouses.map((s:any) => (
-                                <option key={s.id} value={s.id}>{s.name}</option>
-                            ))}
+                            {parentInfo.spouses.map((s:any) => (<option key={s.id} value={s.id}>{s.name}</option>))}
                         </select>
                     </div>
                   </>
               )}
 
-              {isInLaw && formData._bloodlineSpouseId && (
+              {isInLawUI && formData._bloodlineSpouseId && (
                   <>
                     <div className="p-4 rounded-xl border bg-stone-50 border-stone-200">
-                        <label className="text-[10px] font-black text-stone-500 uppercase mb-2 block">
-                            {formData.gender === 'M' ? 'Là Chồng của' : 'Là Vợ của'}
-                        </label>
-                        <input disabled type="text" className="w-full p-3 bg-stone-200 rounded-lg border border-stone-300 font-bold text-sm text-stone-600" 
-                               value={allMembers.find(m => m.id === formData._bloodlineSpouseId)?.full_name || allMembers.find(m => m.id === formData._bloodlineSpouseId)?.fullName} />
+                        <label className="text-[10px] font-black text-stone-500 uppercase mb-2 block">{formData.gender === 'M' ? 'Là Chồng của' : 'Là Vợ của'}</label>
+                        <input disabled type="text" className="w-full p-3 bg-stone-200 rounded-lg border border-stone-300 font-bold text-sm text-stone-600" value={allMembers.find(m => m.id === formData._bloodlineSpouseId)?.full_name || allMembers.find(m => m.id === formData._bloodlineSpouseId)?.fullName} />
                     </div>
                     <div className="p-4 rounded-xl border bg-pink-50 border-pink-200">
                         <label className="text-[10px] font-black text-pink-800 uppercase mb-2 block">Tình trạng hôn nhân</label>
-                        <select 
-                            className="w-full p-3 bg-white rounded-lg border border-pink-200 font-bold text-sm outline-none text-pink-900"
-                            value={formData._marriageStatus}
-                            onChange={(e) => setFormData({...formData, _marriageStatus: e.target.value})}
-                        >
+                        <select className="w-full p-3 bg-white rounded-lg border border-pink-200 font-bold text-sm outline-none text-pink-900" value={formData._marriageStatus} onChange={(e) => setFormData({...formData, _marriageStatus: e.target.value})}>
                             <option value="current">Đang hôn thú</option>
                             <option value="divorced">Đã ly hôn</option>
                         </select>
@@ -444,7 +398,6 @@ const MemberForm: React.FC<MemberFormProps> = ({ member, allMembers, onSave, onC
             </div>
           </div>
 
-          {/* THÔNG TIN BỔ SUNG */}
           <div className="space-y-4">
             <h4 className="text-xs font-black text-blue-800 border-b-2 border-blue-100 pb-2 uppercase">Thông tin bổ sung</h4>
             <div className="grid grid-cols-1 gap-4">
@@ -458,24 +411,16 @@ const MemberForm: React.FC<MemberFormProps> = ({ member, allMembers, onSave, onC
               </div>
               <div>
                 <label className="text-[10px] font-black text-stone-500 uppercase mb-1 block">Ghi chú bổ sung</label>
-                <textarea 
-                  rows={2} 
-                  className="w-full p-3 bg-stone-50 rounded-xl border border-stone-200 outline-none focus:border-blue-500 text-sm" 
-                  placeholder="Thông tin thông gia, số điện thoại, người tổ chức giỗ, ghi chú khác..." 
-                  value={formData.notes} 
-                  onChange={(e) => setFormData({...formData, notes: e.target.value})}
-                ></textarea>
+                <textarea rows={2} className="w-full p-3 bg-stone-50 rounded-xl border border-stone-200 outline-none focus:border-blue-500 text-sm" placeholder="Thông tin thông gia, số điện thoại, người tổ chức giỗ, ghi chú khác..." value={formData.notes} onChange={(e) => setFormData({...formData, notes: e.target.value})}></textarea>
               </div>
             </div>
           </div>
         </div>
 
-        {/* BÀN PHÍM CHỨC NĂNG */}
         <div className="p-6 border-t bg-stone-50 rounded-b-[2rem] flex flex-col sm:flex-row gap-3 shrink-0">
           <button type="submit" className="flex-[2] py-4 bg-[#704214] text-white rounded-2xl font-black flex items-center justify-center gap-2 shadow-lg hover:bg-[#8a5219] transition-all text-sm uppercase tracking-wider">
             <Save size={20} /> {isNew ? 'THÊM VÀO GIA PHẢ' : 'LƯU THAY ĐỔI'}
           </button>
-          
           {!isNew && onDelete && (
             <button type="button" onClick={() => onDelete(formData.id)} className="flex-1 py-4 text-red-600 bg-red-100 hover:bg-red-200 font-bold flex items-center justify-center gap-2 rounded-2xl transition-colors text-xs uppercase">
               <Trash2 size={16} /> Chuyển vào Thùng rác
