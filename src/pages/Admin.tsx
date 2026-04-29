@@ -1,4 +1,4 @@
-// src/pages/Admin.tsx -- version 3.7 (Explicit About Tab & Photo Upload Form)
+// src/pages/Admin.tsx -- version 3.8 (Data Integrity Constraints for Soft Delete)
 
 import React, { useState, useEffect, useCallback, useRef } from 'react';
 import { 
@@ -26,25 +26,21 @@ export const Admin: React.FC<AdminProps> = ({
   const [pin, setPin] = useState('');
   const [error, setError] = useState<string | null>(null);
   
-  // UI States
   const [activeTab, setActiveTab] = useState<AdminTab>('tree');
   const [editingMember, setEditingMember] = useState<any>(null);
   const [formMode, setFormMode] = useState<'edit' | 'add' | null>(null);
   const [isSaving, setIsSaving] = useState(false);
   
-  // System Data States
   const [systemData, setSystemData] = useState<any>(null);
   const [aboutData, setAboutData] = useState({ family_name: '', intro: '', photos: [] as any[] });
   const [securityData, setSecurityData] = useState({ guestPin: '', smPin: '', newMod: { name: '', pin: '', rootId: '' } });
 
-  // Photo Upload States
   const [showPhotoForm, setShowPhotoForm] = useState(false);
   const [newPhotoFile, setNewPhotoFile] = useState<File | null>(null);
   const [newPhotoPreview, setNewPhotoPreview] = useState<string | null>(null);
   const [newPhotoCaption, setNewPhotoCaption] = useState('');
   const fileInputRef = useRef<HTMLInputElement>(null);
 
-  // 1. Xác thực đăng nhập
   const handleLogin = async () => {
     if (isOffline) { setError("Vui lòng kết nối mạng để đăng nhập!"); return; }
     try {
@@ -64,7 +60,6 @@ export const Admin: React.FC<AdminProps> = ({
     } catch (err) { setError("Lỗi kết nối máy chủ"); }
   };
 
-  // 2. Tải dữ liệu hệ thống (Chỉ SM)
   const fetchSystemInfo = useCallback(async () => {
     if (auth?.role !== 'sm' || isOffline) return;
     try {
@@ -84,7 +79,6 @@ export const Admin: React.FC<AdminProps> = ({
     if (auth?.role === 'sm') fetchSystemInfo();
   }, [auth, fetchSystemInfo, activeTab]);
 
-  // 3. Xử lý Thành viên (CUD)
   const handleSaveMember = async (formData: any, newImageBase64?: string) => {
     setIsSaving(true);
     try {
@@ -117,6 +111,22 @@ export const Admin: React.FC<AdminProps> = ({
   };
 
   const handleDeleteMember = async (id: string) => {
+    // --- BẢN VÁ: RÀNG BUỘC KIỂM TRA PHỤ THUỘC (TRÁNH MỒ CÔI DỮ LIỆU) ---
+    const target = globalMembers.find(m => m.id === id);
+    if (target) {
+        // 1. Kiểm tra nếu là Trực hệ, có Dâu/Rể bám theo không?
+        if (target.relation_status !== 'in_law' && target.spouses && target.spouses.length > 0) {
+            alert("LỖI BẢO VỆ DỮ LIỆU:\nThành viên này đang có Dâu/Rể liên kết. Vui lòng xóa hồ sơ Dâu/Rể trước để tránh dữ liệu bị mồ côi!");
+            return;
+        }
+        // 2. Kiểm tra có con cái không?
+        const hasChildren = globalMembers.some(m => m.father_id === id || m.mother_id === id);
+        if (hasChildren) {
+            alert("LỖI BẢO VỆ DỮ LIỆU:\nThành viên này đang có con cái. Vui lòng xóa hồ sơ các con trước!");
+            return;
+        }
+    }
+
     if (!window.confirm("Chuyển thành viên này vào thùng rác?")) return;
     setIsSaving(true);
     try {
@@ -132,7 +142,6 @@ export const Admin: React.FC<AdminProps> = ({
     } catch (err) { alert("Lỗi kết nối"); } finally { setIsSaving(false); }
   };
 
-  // 4. Quản lý Mod & Security
   const handleSecurityAction = async (action: string, payload: any) => {
     setIsSaving(true);
     try {
@@ -143,10 +152,9 @@ export const Admin: React.FC<AdminProps> = ({
       });
       const data = await res.json() as { error?: string };
       if (res.ok) {
-        // Chỉ refresh data để lấy family_name mới nếu cập nhật family_name thành công
         if (action === 'UPDATE_FAMILY_NAME') await refreshData();
         fetchSystemInfo();
-        return true; // Trả về true để biết là thành công
+        return true; 
       } else {
         alert(data.error || "Lỗi xử lý");
         return false;
@@ -154,7 +162,6 @@ export const Admin: React.FC<AdminProps> = ({
     } finally { setIsSaving(false); }
   };
 
-  // 5. Backup & Restore
   const handleBackup = async () => {
     try {
       const res = await fetch('/api/system/backup');
@@ -192,12 +199,9 @@ export const Admin: React.FC<AdminProps> = ({
     } finally { setIsSaving(false); }
   };
 
-  // 6. Photo Upload Logic
   const handleSelectNewPhoto = (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
     if (!file) return;
-    
-    // Tạm thời cho upload ảnh gốc (Giới hạn ở Backend là 10MB)
     setNewPhotoFile(file);
     const reader = new FileReader();
     reader.onload = (event) => setNewPhotoPreview(event.target?.result as string);
@@ -208,7 +212,6 @@ export const Admin: React.FC<AdminProps> = ({
     if (!newPhotoFile) return alert("Vui lòng chọn ảnh!");
     setIsSaving(true);
     try {
-      // 1. Upload file lên R2 lấy URL
       const uploadForm = new FormData();
       uploadForm.append('file', newPhotoFile, newPhotoFile.name);
       
@@ -220,7 +223,6 @@ export const Admin: React.FC<AdminProps> = ({
         return;
       }
 
-      // 2. Thêm vào danh sách và cập nhật DB (UPDATE_FAMILY_PHOTOS)
       const updatedPhotos = [...aboutData.photos, { url: uploadData.url, caption: newPhotoCaption }];
       
       const res = await fetch('/api/system/security', {
@@ -245,7 +247,6 @@ export const Admin: React.FC<AdminProps> = ({
       setIsSaving(false);
     }
   };
-
 
   if (!auth || auth.role === 'guest') {
     return (
@@ -274,7 +275,6 @@ export const Admin: React.FC<AdminProps> = ({
 
   return (
     <div className="h-full flex flex-col bg-[#f8f7f5] overflow-hidden">
-      {/* NAVBAR QUẢN TRỊ */}
       <div className="px-6 py-4 border-b flex flex-wrap justify-between items-center bg-white shadow-sm z-30 gap-4">
         <div className="flex items-center gap-2 overflow-x-auto no-scrollbar pb-1 sm:pb-0">
           <button onClick={() => setActiveTab('tree')} className={`px-5 py-2.5 rounded-xl text-[10px] font-black uppercase flex items-center gap-2 transition-all whitespace-nowrap ${activeTab === 'tree' ? 'bg-[#704214] text-white shadow-lg' : 'bg-stone-100 text-stone-500 hover:bg-stone-200'}`}><Database size={14} /> Cây Gia Phả</button>
@@ -304,7 +304,6 @@ export const Admin: React.FC<AdminProps> = ({
       </div>
 
       <div className="flex-1 relative overflow-hidden">
-        {/* TAB 1: CÂY GIA PHẢ ADMIN */}
         {activeTab === 'tree' && (
           <TreeViewAdmin 
             members={globalMembers} currentUserRole={auth.role} allowedRootId={auth.rootId || null}
@@ -319,13 +318,11 @@ export const Admin: React.FC<AdminProps> = ({
           />
         )}
 
-        {/* TAB 2: MOD & BẢO MẬT (CHUNG CHO SM VÀ MOD) */}
         {activeTab === 'security' && (
           <div className="h-full overflow-y-auto p-6 space-y-10 custom-scrollbar max-w-5xl mx-auto">
             
             {auth.role === 'sm' ? (
               <>
-                {/* GIAO DIỆN BẢO MẬT DÀNH CHO SM */}
                 <section className="space-y-4">
                   <h3 className="text-xs font-black text-stone-400 uppercase tracking-widest flex items-center gap-2"><ShieldCheck size={16}/> Quản lý Mod Nhánh</h3>
                   <div className="bg-white rounded-3xl border shadow-sm overflow-hidden">
@@ -351,7 +348,6 @@ export const Admin: React.FC<AdminProps> = ({
                             </td>
                           </tr>
                         ))}
-                        {/* HÀNG THÊM MOD MỚI NHANH */}
                         <tr className="bg-blue-50/30">
                             <td className="p-4">
                                 <input type="text" placeholder="Tên Mod..." className="w-full bg-white p-2 rounded-lg text-xs border border-blue-100 outline-none" value={securityData.newMod.name} onChange={e => setSecurityData({...securityData, newMod: {...securityData.newMod, name: e.target.value}})} />
@@ -369,7 +365,6 @@ export const Admin: React.FC<AdminProps> = ({
                 </section>
 
                 <section className="grid grid-cols-1 md:grid-cols-2 gap-6">
-                    {/* Khu vực quản lý View PIN */}
                     {(() => {
                         const isGuestPinActive = !!systemData?.settings?.find((s: any) => s.key === 'view_pin_hash')?.value;
                         return (
@@ -423,7 +418,6 @@ export const Admin: React.FC<AdminProps> = ({
                 </section>
               </>
             ) : (
-              /* GIAO DIỆN DÀNH RIÊNG CHO MOD: TỰ ĐỔI MÃ PIN */
               <section className="bg-white p-8 rounded-[2.5rem] border shadow-sm space-y-6 max-w-md mx-auto mt-10">
                 <div className="text-center space-y-2">
                   <div className="inline-flex p-4 bg-blue-50 text-blue-600 rounded-2xl mb-2"><Key size={32}/></div>
@@ -448,14 +442,12 @@ export const Admin: React.FC<AdminProps> = ({
           </div>
         )}
 
-        {/* TAB 3: QUẢN TRỊ TRANG ABOUT (CHỈ SM) */}
         {activeTab === 'about' && auth.role === 'sm' && (
           <div className="h-full overflow-y-auto p-6 space-y-8 custom-scrollbar max-w-5xl mx-auto pb-32">
              <div className="flex justify-between items-center border-b-2 border-pink-100 pb-4">
                 <h3 className="text-lg font-black text-pink-900 uppercase tracking-tighter">Nội dung Giới thiệu dòng tộc</h3>
              </div>
              
-             {/* 1. TÊN HIỂN THỊ */}
              <div className="bg-white p-6 rounded-[2rem] border shadow-sm space-y-3">
                 <div className="flex justify-between items-center">
                     <label className="text-[10px] font-black text-stone-400 uppercase tracking-widest">Tên hiển thị Gia Phả</label>
@@ -476,7 +468,6 @@ export const Admin: React.FC<AdminProps> = ({
                 </div>
              </div>
 
-             {/* 2. TIỂU SỬ DÒNG TỘC */}
              <div className="bg-white p-6 rounded-[2rem] border shadow-sm space-y-3">
                 <div className="flex justify-between items-center">
                     <label className="text-[10px] font-black text-stone-400 uppercase tracking-widest">Tiểu sử dòng tộc (Hiển thị đầu trang About)</label>
@@ -497,7 +488,6 @@ export const Admin: React.FC<AdminProps> = ({
                 </div>
              </div>
 
-             {/* 3. ALBUM ẢNH DÒNG TỘC */}
              <div className="bg-white p-6 rounded-[2rem] border shadow-sm space-y-6 relative">
                 <div className="flex justify-between items-center">
                     <label className="text-[10px] font-black text-stone-400 uppercase tracking-widest">Album ảnh dòng tộc ({aboutData.photos.length}/12 ảnh)</label>
@@ -515,7 +505,6 @@ export const Admin: React.FC<AdminProps> = ({
                     </div>
                 </div>
 
-                {/* FORM TẢI ẢNH MỚI TƯỜNG MINH */}
                 {showPhotoForm && (
                     <div className="p-4 bg-pink-50/50 rounded-2xl border-2 border-dashed border-pink-200 animate-in fade-in zoom-in-95">
                         <div className="flex justify-between items-center mb-4">
@@ -523,7 +512,6 @@ export const Admin: React.FC<AdminProps> = ({
                             <button onClick={() => { setShowPhotoForm(false); setNewPhotoPreview(null); setNewPhotoFile(null); setNewPhotoCaption(''); }} className="text-stone-400 hover:text-red-500"><X size={16}/></button>
                         </div>
                         <div className="flex flex-col sm:flex-row gap-4 items-start">
-                            {/* Khu vực chọn ảnh */}
                             <div className="w-full sm:w-40 aspect-square shrink-0 rounded-xl border-2 border-stone-200 border-dashed bg-white flex flex-col items-center justify-center overflow-hidden relative cursor-pointer hover:border-pink-300 transition-colors group" onClick={() => fileInputRef.current?.click()}>
                                 {newPhotoPreview ? (
                                     <>
@@ -539,7 +527,6 @@ export const Admin: React.FC<AdminProps> = ({
                                 <input type="file" accept="image/jpeg, image/png, image/webp" className="hidden" ref={fileInputRef} onChange={handleSelectNewPhoto} />
                             </div>
 
-                            {/* Khu vực nhập Caption và Upload */}
                             <div className="flex-1 w-full space-y-3">
                                 <div>
                                     <div className="flex justify-between items-center mb-1">
@@ -566,14 +553,12 @@ export const Admin: React.FC<AdminProps> = ({
                     </div>
                 )}
 
-                {/* DANH SÁCH ẢNH HIỆN TẠI */}
                 {aboutData.photos.length > 0 ? (
                     <div className="grid grid-cols-2 sm:grid-cols-4 md:grid-cols-5 gap-4">
                         {aboutData.photos.map((photo, idx) => (
                             <div key={idx} className="relative aspect-square bg-stone-100 rounded-2xl border border-stone-200 overflow-hidden group shadow-sm">
                                 <img src={photo.url} className="w-full h-full object-cover transition-transform group-hover:scale-105 duration-500" onError={(e) => e.currentTarget.style.display='none'} />
                                 
-                                {/* Lớp phủ mờ hiển thị nút Xóa góc trên cùng */}
                                 <div className="absolute top-0 right-0 p-1 opacity-0 group-hover:opacity-100 transition-opacity z-20">
                                      <button 
                                         onClick={() => {
@@ -586,7 +571,6 @@ export const Admin: React.FC<AdminProps> = ({
                                      ><Trash2 size={14}/></button>
                                 </div>
 
-                                {/* Lớp phủ Caption bên dưới */}
                                 <div className="absolute inset-x-0 bottom-0 bg-gradient-to-t from-black/80 via-black/40 to-transparent p-2 pt-6">
                                     <input 
                                         type="text" maxLength={150} 
@@ -611,10 +595,8 @@ export const Admin: React.FC<AdminProps> = ({
           </div>
         )}
 
-        {/* TAB 4: HỆ THỐNG & THÙNG RÁC (CHỈ SM) */}
         {activeTab === 'system' && auth.role === 'sm' && (
           <div className="h-full overflow-y-auto p-6 space-y-10 custom-scrollbar max-w-5xl mx-auto">
-            {/* WIDGETS GIÁM SÁT */}
             <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
                 <div className="bg-white p-5 rounded-3xl border shadow-sm text-center space-y-1">
                     <p className="text-[9px] font-black text-stone-400 uppercase tracking-widest">Thành viên</p>
@@ -634,7 +616,6 @@ export const Admin: React.FC<AdminProps> = ({
                 </div>
             </div>
 
-            {/* CÔNG CỤ SAO LƯU */}
             <section className="bg-stone-800 p-8 rounded-[2.5rem] text-white space-y-6 shadow-2xl relative overflow-hidden group">
                 <div className="absolute top-0 right-0 p-10 opacity-10 group-hover:rotate-12 transition-transform"><Database size={160}/></div>
                 <div className="relative">
@@ -650,7 +631,6 @@ export const Admin: React.FC<AdminProps> = ({
                 </div>
             </section>
 
-            {/* THÙNG RÁC */}
             <section className="space-y-4">
               <h3 className="text-xs font-black text-stone-400 uppercase flex items-center gap-2 tracking-widest"><Trash2 size={16}/> Thùng rác (Thành viên bị ẩn)</h3>
               <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
@@ -670,7 +650,6 @@ export const Admin: React.FC<AdminProps> = ({
               </div>
             </section>
 
-            {/* NHẬT KÝ */}
             <section className="space-y-4">
               <h3 className="text-xs font-black text-stone-400 uppercase flex items-center gap-2 tracking-widest"><History size={16}/> Nhật ký thao tác (Audit Logs)</h3>
               <div className="bg-white rounded-[2rem] border overflow-hidden shadow-sm">

@@ -1,4 +1,4 @@
-// /functions/api/system/security.ts -- version 1.5
+// /functions/api/system/security.ts -- version 1.6 (Orphaned Data Prevention)
 interface Env {
   DB: D1Database;
   BUCKET: R2Bucket;
@@ -21,7 +21,6 @@ export const onRequestPost: PagesFunction<Env, any, { user: any }> = async (cont
     const authorName = user.mod_name || (user.role === 'sm' ? "Trưởng tộc" : "Mod");
 
     switch (action) {
-      // 1. CẬP NHẬT TÊN GIA PHẢ (MAX 100 CHARS)
       case 'UPDATE_FAMILY_NAME': {
         if (user.role !== 'sm') throw new Error("Quyền SM yêu cầu");
         const name = (payload.name || "").trim().substring(0, 100);
@@ -30,7 +29,6 @@ export const onRequestPost: PagesFunction<Env, any, { user: any }> = async (cont
         break;
       }
 
-      // 2. CẬP NHẬT TIỂU SỬ DÒNG TỘC (MAX 3000 CHARS)
       case 'UPDATE_ABOUT_INTRO': {
         if (user.role !== 'sm') throw new Error("Quyền SM yêu cầu");
         const intro = (payload.intro || "").trim().substring(0, 3000);
@@ -39,10 +37,8 @@ export const onRequestPost: PagesFunction<Env, any, { user: any }> = async (cont
         break;
       }
 
-      // 3. CẬP NHẬT DANH SÁCH ẢNH (Dùng cho việc sửa caption hoặc đổi thứ tự)
       case 'UPDATE_FAMILY_PHOTOS': {
         if (user.role !== 'sm') throw new Error("Quyền SM yêu cầu");
-        // Payload.photos là mảng các object { url, caption }
         const photos = Array.isArray(payload.photos) ? payload.photos : [];
         if (photos.length > 12) throw new Error("Vượt quá giới hạn 12 ảnh cho phép");
         await upsertSetting(env.DB, 'family_photos', JSON.stringify(photos));
@@ -50,17 +46,14 @@ export const onRequestPost: PagesFunction<Env, any, { user: any }> = async (cont
         break;
       }
 
-      // 4. XÓA ẢNH KHỎI ALBUM (XÓA VẬT LÝ TRÊN R2 & TRỪ DUNG LƯỢNG)
       case 'DELETE_FAMILY_PHOTO': {
         if (user.role !== 'sm') throw new Error("Quyền SM yêu cầu");
-        const targetUrl = payload.url; // URL ảnh cần xóa
+        const targetUrl = payload.url; 
         if (!targetUrl) throw new Error("Thiếu URL ảnh");
 
-        // BƯỚC A: Lấy danh sách ảnh hiện tại từ DB
         const currentPhotosRow = await env.DB.prepare("SELECT value FROM system_settings WHERE key = 'family_photos'").first() as any;
         let photos = currentPhotosRow ? JSON.parse(currentPhotosRow.value) : [];
 
-        // BƯỚC B: Trích xuất tên file và xóa trên R2
         const fileName = targetUrl.split('/').pop()?.split('?')[0];
         if (fileName) {
           try {
@@ -68,10 +61,8 @@ export const onRequestPost: PagesFunction<Env, any, { user: any }> = async (cont
             if (objectMetadata) {
               const fileSize = objectMetadata.size;
               
-              // Xóa file vật lý
               await env.BUCKET.delete(fileName);
 
-              // Cập nhật sổ kế toán dung lượng
               const currentBytesRow = await env.DB.prepare("SELECT value FROM system_settings WHERE key = 'r2_storage_bytes'").first() as any;
               let currentBytes = currentBytesRow ? parseInt(currentBytesRow.value, 10) : 0;
               currentBytes = Math.max(0, currentBytes - fileSize);
@@ -85,7 +76,6 @@ export const onRequestPost: PagesFunction<Env, any, { user: any }> = async (cont
           }
         }
 
-        // BƯỚC C: Cập nhật lại danh sách ảnh mới (loại bỏ ảnh vừa xóa)
         const updatedPhotos = photos.filter((p: any) => p.url !== targetUrl);
         await upsertSetting(env.DB, 'family_photos', JSON.stringify(updatedPhotos));
         
@@ -166,26 +156,40 @@ export const onRequestPost: PagesFunction<Env, any, { user: any }> = async (cont
       case 'HARD_DELETE_MEMBER': {
         if (user.role !== 'sm') throw new Error("Chỉ Trưởng tộc mới có quyền xóa vĩnh viễn");
         
+        // --- BẢN VÁ: RÀNG BUỘC KÉP TRÁNH DỮ LIỆU MỒ CÔI TẠI DB ---
+        // 1. Lấy thông tin thành viên đang bị yêu cầu xóa
+        const member = await env.DB.prepare("SELECT full_name, avatar_url, relation_status FROM members WHERE id = ?").bind(payload.id).first() as any;
+        if (!member) throw new Error("Không tìm thấy thành viên!");
+
+        // 2. Chặn nếu có con cái
         const deps = await env.DB.prepare("SELECT id FROM members WHERE (father_id = ? OR mother_id = ?) AND is_deleted = 0 LIMIT 1")
           .bind(payload.id, payload.id).first();
         if (deps) throw new Error("Thành viên đang có con, không thể xóa cứng!");
         
-        // PHẪU THUẬT 2: Lấy thêm avatar_url để kiểm tra ảnh trên R2
-        const member = await env.DB.prepare("SELECT full_name, avatar_url FROM members WHERE id = ?").bind(payload.id).first() as any;
+        // 3. Chặn xóa thành viên Trực hệ nếu họ vẫn còn Dâu/Rể trong CSDL (dù đã ở trong Thùng rác)
+        if (member.relation_status !== 'in_law') {
+           const inLawDeps = await env.DB.prepare(`
+             SELECT m.id 
+             FROM marriages mr
+             JOIN members m ON (m.id = mr.husband_id OR m.id = mr.wife_id)
+             WHERE (mr.husband_id = ? OR mr.wife_id = ?)
+               AND m.id != ?
+               AND m.relation_status = 'in_law'
+             LIMIT 1
+           `).bind(payload.id, payload.id, payload.id).first();
+           if (inLawDeps) throw new Error("Thành viên trực hệ này đang có dữ liệu Dâu/Rể liên kết. Vui lòng xóa vĩnh viễn Dâu/Rể đó trước!");
+        }
         
-        // PHẪU THUẬT 3: Tích hợp logic dọn rác R2 y hệt như file [id].ts
-        if (member && member.avatar_url) {
+        // 4. Dọn rác R2
+        if (member.avatar_url) {
           const fileName = member.avatar_url.split('/').pop()?.split('?')[0];
           if (fileName) {
             try {
               const objectMetadata = await env.BUCKET.head(fileName);
               if (objectMetadata) {
                 const fileSize = objectMetadata.size;
-                
-                // Xóa file vật lý
                 await env.BUCKET.delete(fileName);
 
-                // Cập nhật sổ kế toán dung lượng
                 const currentBytesRow = await env.DB.prepare("SELECT value FROM system_settings WHERE key = 'r2_storage_bytes'").first() as any;
                 let currentBytes = currentBytesRow ? parseInt(currentBytesRow.value, 10) : 0;
                 currentBytes = Math.max(0, currentBytes - fileSize);
@@ -200,9 +204,11 @@ export const onRequestPost: PagesFunction<Env, any, { user: any }> = async (cont
           }
         }
 
-        // Xóa bản ghi trong database D1
+        // 5. Tự động xóa sạch Hợp đồng hôn nhân (marriages) & Xóa thành viên
+        await env.DB.prepare("DELETE FROM marriages WHERE husband_id = ? OR wife_id = ?").bind(payload.id, payload.id).run();
         await env.DB.prepare("DELETE FROM members WHERE id = ?").bind(payload.id).run();
-        await logAudit(env.DB, authorName, "Xóa vĩnh viễn", member?.full_name || payload.id);
+        
+        await logAudit(env.DB, authorName, "Xóa vĩnh viễn", member.full_name || payload.id);
         break;
       }
 
@@ -225,7 +231,6 @@ export const onRequestPost: PagesFunction<Env, any, { user: any }> = async (cont
   }
 };
 
-// --- HELPERS ---
 async function sha256(message: string): Promise<string> {
   const msgBuffer = new TextEncoder().encode(message);
   const hashBuffer = await crypto.subtle.digest("SHA-256", msgBuffer);

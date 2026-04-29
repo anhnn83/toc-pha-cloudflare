@@ -1,4 +1,4 @@
-// src/components/MemberDetailModal.tsx -- version 4.3
+// src/components/MemberDetailModal.tsx -- version 4.4 (Specific Relation UI)
 
 import React, { useState, useMemo } from 'react';
 import { X, User, Calendar, MapPin, BookOpen, Quote, Users, Heart, HeartOff, Baby } from 'lucide-react';
@@ -71,6 +71,17 @@ const MemberDetailModal: React.FC<Props> = ({ member, members, onClose }) => {
     );
   };
 
+  // 4. Logic xác định nhãn hiển thị cho Quan hệ dòng tộc
+  const relationDisplay = useMemo(() => {
+    if (member.relation_status === 'biological') return '🧬 Con ruột';
+    if (member.relation_status === 'in_law') {
+      return member.gender === 'F' ? '👧 Dâu' : '👦 Rể';
+    }
+    if (member.relation_status === 'adopted') return '👨‍👧 Con nuôi';
+    if (member.relation_status === 'step') return '🩸 Con riêng';
+    return 'Không rõ';
+  }, [member.relation_status, member.gender]);
+
   return (
     <div className="fixed inset-0 z-[100] flex items-center justify-center p-4 bg-black/70 backdrop-blur-md animate-in fade-in">
       <div className="bg-white w-full max-w-xl rounded-3xl shadow-2xl overflow-hidden flex flex-col max-h-[92vh] relative">
@@ -93,7 +104,7 @@ const MemberDetailModal: React.FC<Props> = ({ member, members, onClose }) => {
               </div>
               <div className="p-4 bg-stone-50 rounded-2xl border border-stone-100 shadow-sm">
                 <p className="text-[10px] text-stone-400 uppercase font-black mb-1">Quan hệ dòng tộc</p>
-                <p className="text-base font-bold text-stone-700">{member.relation_status === 'biological' ? '🧬 Con ruột' : member.relation_status === 'in_law' ? '🤝 Dâu/Rể' : 'Con nuôi/riêng'}</p>
+                <p className="text-base font-bold text-stone-700">{relationDisplay}</p>
               </div>
             </div>
             <div className="w-32 sm:w-40 shrink-0">
