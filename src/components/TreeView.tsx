@@ -1,4 +1,4 @@
-// src/components/TreeView.tsx -- version 3.1 (Added Anniversary List)
+// src/components/TreeView.tsx -- version 3.2 (Responsive Anniversary Table)
 
 import React, { useMemo, useRef, useState } from 'react';
 import { Tree, TreeNode } from 'react-organizational-chart';
@@ -20,17 +20,13 @@ const TreeView: React.FC<{ members: Member[] }> = ({ members }) => {
     [logic.selectedDetailId, members]
   );
 
-  // --- LOGIC: TÍNH TOÁN DANH SÁCH NGÀY GIỖ ---
   const anniversaryList = useMemo(() => {
-    // 1. Hàm đệ quy lấy danh sách ID của các thành viên "Đang hiển thị" trên cây
     const getVisibleMemberIds = (rootId: string, acc: Set<string>) => {
       acc.add(rootId);
-      // Lấy vợ/chồng
       const rootMember = members.find(m => m.id === rootId);
       if (rootMember && rootMember.spouses) {
         rootMember.spouses.forEach((s: any) => acc.add(s.id));
       }
-      // Đệ quy lấy con cái (bỏ qua nếu nút đang bị thu gọn)
       if (!logic.collapsedIds.has(rootId)) {
          const children = members.filter(m => m.father_id === rootId || m.mother_id === rootId);
          children.forEach(child => getVisibleMemberIds(child.id, acc));
@@ -38,13 +34,11 @@ const TreeView: React.FC<{ members: Member[] }> = ({ members }) => {
       return acc;
     };
 
-    // 2. Xác định danh sách thành viên hiện hữu (Toàn cây hoặc theo Focus)
     let visibleIds = new Set<string>();
     if (logic.rootMember) {
        visibleIds = getVisibleMemberIds(logic.rootMember.id, new Set());
     }
 
-    // 3. Lọc & Tính toán ngày Dương lịch
     const list = members
       .filter(m => visibleIds.has(m.id) && m.is_alive === 0 && m.lunar_death_date)
       .map(m => {
@@ -52,7 +46,6 @@ const TreeView: React.FC<{ members: Member[] }> = ({ members }) => {
         let solarTimestamp = Infinity;
         if (solarDateStr) {
            const [dd, mm, yyyy] = solarDateStr.split('/');
-           // Convert sang mốc timestamp (lưu ý: tháng trong JS Date bắt đầu từ 0)
            solarTimestamp = new Date(parseInt(yyyy), parseInt(mm) - 1, parseInt(dd)).getTime();
         }
         return {
@@ -64,9 +57,8 @@ const TreeView: React.FC<{ members: Member[] }> = ({ members }) => {
           solarTimestamp
         };
       })
-      .filter(item => item.solarDateStr !== null); // Loại bỏ những người có ngày lỗi
+      .filter(item => item.solarDateStr !== null);
 
-    // 4. Sắp xếp tăng dần theo ngày Dương lịch
     list.sort((a, b) => a.solarTimestamp - b.solarTimestamp);
 
     return list;
@@ -145,8 +137,8 @@ const TreeView: React.FC<{ members: Member[] }> = ({ members }) => {
     <div className="w-full h-full bg-[#f8f7f5] overflow-hidden relative">
       
       {/* THANH ĐIỀU KHIỂN BÊN TRÁI */}
-      <div className="absolute top-6 left-6 z-40 flex flex-col gap-4">
-        <div className="w-72 relative group">
+      <div className="absolute top-6 left-6 z-40 flex flex-col gap-4 max-w-[calc(100vw-3rem)]">
+        <div className="w-full sm:w-72 relative group">
           <div className="absolute inset-y-0 left-0 pl-3 flex items-center pointer-events-none">
             <Search size={18} className="text-stone-400" />
           </div>
@@ -163,7 +155,7 @@ const TreeView: React.FC<{ members: Member[] }> = ({ members }) => {
               </button>
             )}
             {logic.searchResults.length > 0 && (
-              <div className="absolute top-full mt-1 left-0 right-0 bg-white rounded-2xl shadow-xl border border-stone-100 overflow-hidden z-50">
+              <div className="absolute top-full mt-1 left-0 right-0 bg-white rounded-2xl shadow-xl border border-stone-100 overflow-hidden z-50 max-h-60 overflow-y-auto custom-scrollbar">
                 {logic.searchResults.map((m: any) => (
                   <button
                     key={m.id}
@@ -180,21 +172,23 @@ const TreeView: React.FC<{ members: Member[] }> = ({ members }) => {
             )}
         </div>
         
-        <button 
-          onClick={() => transformRef.current?.centerView(0.6)}
-          className="w-12 h-12 bg-white rounded-2xl shadow-lg border border-stone-200 flex items-center justify-center text-[#704214] hover:bg-stone-50 transition-colors"
-          title="Đưa về trung tâm"
-        >
-          <Crosshair size={20} />
-        </button>
+        <div className="flex gap-4">
+            <button 
+            onClick={() => transformRef.current?.centerView(0.6)}
+            className="w-12 h-12 bg-white rounded-2xl shadow-lg border border-stone-200 flex items-center justify-center text-[#704214] hover:bg-stone-50 transition-colors shrink-0"
+            title="Đưa về trung tâm"
+            >
+            <Crosshair size={20} />
+            </button>
 
-        <button 
-          onClick={() => setShowAnniversaries(true)}
-          className="w-12 h-12 bg-white rounded-2xl shadow-lg border border-stone-200 flex items-center justify-center text-orange-600 hover:bg-orange-50 transition-colors"
-          title="Liệt kê ngày giỗ trong năm"
-        >
-          <CalendarClock size={20} />
-        </button>
+            <button 
+            onClick={() => setShowAnniversaries(true)}
+            className="w-12 h-12 bg-white rounded-2xl shadow-lg border border-stone-200 flex items-center justify-center text-orange-600 hover:bg-orange-50 transition-colors shrink-0"
+            title="Liệt kê ngày giỗ trong năm"
+            >
+            <CalendarClock size={20} />
+            </button>
+        </div>
       </div>
 
       {logic.focusId && (
@@ -202,60 +196,65 @@ const TreeView: React.FC<{ members: Member[] }> = ({ members }) => {
           onClick={() => logic.setFocusId(null)}
           className="absolute top-6 right-6 z-40 bg-blue-600 text-white px-5 py-3 rounded-2xl font-black text-xs shadow-2xl flex items-center gap-2"
         >
-          <X size={16} /> THOÁT TẬP TRUNG
+          <X size={16} /> <span className="hidden sm:inline">THOÁT TẬP TRUNG</span>
         </button>
       )}
 
       {/* DANH SÁCH NGÀY GIỖ (MODAL) */}
       {showAnniversaries && (
-        <div className="absolute inset-0 z-50 flex justify-start items-start pointer-events-none p-6 pt-24 pl-24">
-           {/* Lớp nền tối phía sau (chỉ che phần nội dung danh sách, click ra ngoài để đóng) */}
-           <div className="fixed inset-0 bg-black/20 pointer-events-auto backdrop-blur-sm" onClick={() => setShowAnniversaries(false)}></div>
+        <div className="absolute inset-0 z-50 flex justify-center sm:justify-start items-center sm:items-start p-4 sm:p-6 sm:pt-24 sm:pl-24 pointer-events-none">
+           <div className="fixed inset-0 bg-black/40 sm:bg-black/20 pointer-events-auto backdrop-blur-sm transition-opacity" onClick={() => setShowAnniversaries(false)}></div>
            
-           <div className="bg-white w-full max-w-2xl rounded-[2rem] shadow-2xl flex flex-col max-h-[80vh] overflow-hidden animate-in fade-in slide-in-from-left-8 pointer-events-auto relative z-10">
-              <div className="flex justify-between items-center p-6 border-b bg-orange-50 rounded-t-[2rem] shrink-0">
+           <div className="bg-white w-full max-w-2xl rounded-[2rem] shadow-2xl flex flex-col max-h-[85vh] sm:max-h-[80vh] overflow-hidden animate-in fade-in zoom-in-95 sm:slide-in-from-left-8 pointer-events-auto relative z-10">
+              <div className="flex justify-between items-center p-5 sm:p-6 border-b bg-orange-50 rounded-t-[2rem] shrink-0">
                   <div>
-                    <h3 className="font-black text-xl text-orange-900 uppercase tracking-tight flex items-center gap-2">
-                        <CalendarClock size={24}/> Ngày Giỗ Trong Năm
+                    <h3 className="font-black text-lg sm:text-xl text-orange-900 uppercase tracking-tight flex items-center gap-2">
+                        <CalendarClock size={24} className="shrink-0"/> <span className="truncate">Ngày Giỗ Trong Năm</span>
                     </h3>
-                    <p className="text-[11px] text-orange-600 font-bold uppercase mt-1">
+                    <p className="text-[10px] sm:text-[11px] text-orange-600 font-bold uppercase mt-1">
                         Sắp xếp theo Ngày Dương lịch gần nhất
                     </p>
                   </div>
-                  <button onClick={() => setShowAnniversaries(false)} className="p-2 text-orange-400 hover:text-red-500 hover:bg-orange-100 rounded-full transition-colors">
+                  <button onClick={() => setShowAnniversaries(false)} className="p-2 text-orange-400 hover:text-red-500 hover:bg-orange-100 rounded-full transition-colors shrink-0 ml-2">
                       <X size={24}/>
                   </button>
               </div>
 
-              <div className="flex-1 overflow-y-auto custom-scrollbar p-6">
+              <div className="flex-1 overflow-y-auto bg-white p-4 sm:p-6">
                  {anniversaryList.length > 0 ? (
-                    <div className="border rounded-2xl overflow-hidden shadow-sm">
-                        <table className="w-full text-left border-collapse">
-                            <thead className="bg-stone-50 border-b">
-                                <tr>
-                                    <th className="p-3 text-[10px] font-black text-stone-400 uppercase text-center w-12">STT</th>
-                                    <th className="p-3 text-[10px] font-black text-stone-400 uppercase">Họ Tên (Biệt danh)</th>
-                                    <th className="p-3 text-[10px] font-black text-stone-400 uppercase text-center whitespace-nowrap">Âm Lịch</th>
-                                    <th className="p-3 text-[10px] font-black text-blue-700 uppercase text-right whitespace-nowrap bg-blue-50/50">Dương Lịch Sắp Tới</th>
-                                </tr>
-                            </thead>
-                            <tbody className="divide-y text-sm">
-                                {anniversaryList.map((item, index) => (
-                                    <tr key={item.id} className="hover:bg-orange-50/30 transition-colors">
-                                        <td className="p-3 text-center text-stone-400 font-bold">{index + 1}</td>
-                                        <td className="p-3 font-bold text-stone-800">
-                                            {item.name}
-                                            {item.alias && <span className="text-stone-400 font-normal italic ml-1">({item.alias})</span>}
-                                        </td>
-                                        <td className="p-3 text-center font-bold text-orange-700">{item.lunarDate}</td>
-                                        <td className="p-3 text-right font-black text-blue-700 bg-blue-50/20">{item.solarDateStr}</td>
+                    // --- BẢN VÁ: Responsive Table với thẻ bọc overflow-x-auto ---
+                    <div className="border border-stone-200 rounded-2xl shadow-sm relative group bg-white">
+                        {/* Shadow giả mờ ở mép phải báo hiệu có thể lướt */}
+                        <div className="absolute inset-y-0 right-0 w-8 bg-gradient-to-l from-white to-transparent opacity-100 sm:opacity-0 pointer-events-none z-10"></div>
+                        
+                        <div className="w-full overflow-x-auto custom-scrollbar pb-1">
+                            <table className="w-full text-left border-collapse min-w-[450px]">
+                                <thead className="bg-stone-50 border-b border-stone-200">
+                                    <tr>
+                                        <th className="p-3 text-[10px] font-black text-stone-400 uppercase text-center w-12 shrink-0">STT</th>
+                                        <th className="p-3 text-[10px] font-black text-stone-400 uppercase whitespace-nowrap">Họ Tên (Biệt danh)</th>
+                                        <th className="p-3 text-[10px] font-black text-stone-400 uppercase text-center whitespace-nowrap">Âm Lịch</th>
+                                        <th className="p-3 text-[10px] font-black text-blue-700 uppercase text-right whitespace-nowrap bg-blue-50/50">Dương Lịch Sắp Tới</th>
                                     </tr>
-                                ))}
-                            </tbody>
-                        </table>
+                                </thead>
+                                <tbody className="divide-y divide-stone-100 text-sm">
+                                    {anniversaryList.map((item, index) => (
+                                        <tr key={item.id} className="hover:bg-orange-50/30 transition-colors">
+                                            <td className="p-3 text-center text-stone-400 font-bold">{index + 1}</td>
+                                            <td className="p-3 font-bold text-stone-800 whitespace-nowrap">
+                                                {item.name}
+                                                {item.alias && <span className="text-stone-400 font-normal italic ml-1">({item.alias})</span>}
+                                            </td>
+                                            <td className="p-3 text-center font-bold text-orange-700 whitespace-nowrap">{item.lunarDate}</td>
+                                            <td className="p-3 text-right font-black text-blue-700 bg-blue-50/20 whitespace-nowrap">{item.solarDateStr}</td>
+                                        </tr>
+                                    ))}
+                                </tbody>
+                            </table>
+                        </div>
                     </div>
                  ) : (
-                    <div className="py-12 flex flex-col items-center justify-center text-stone-400 space-y-3 bg-stone-50 rounded-3xl border border-dashed">
+                    <div className="py-12 flex flex-col items-center justify-center text-stone-400 space-y-3 bg-stone-50 rounded-3xl border border-dashed h-full min-h-[200px]">
                         <CalendarClock size={40} className="opacity-20" />
                         <p className="text-xs font-black uppercase tracking-widest text-center">Không có dữ liệu ngày giỗ<br/>trong khu vực đang hiển thị</p>
                     </div>
