@@ -44,6 +44,14 @@ const MemberDetailModal: React.FC<Props> = ({ member, members, onClose }) => {
     return getNextSolarAnniversary(member.lunar_death_date);
   }, [member.lunar_death_date]);
 
+  const nextSolarDayOfWeekFull = useMemo(() => {
+    if (!nextSolarDate) return '';
+    const [dd, mm, yyyy] = nextSolarDate.split('/');
+    const dateObj = new Date(parseInt(yyyy), parseInt(mm) - 1, parseInt(dd));
+    const daysFull = ['Chủ nhật', 'Thứ 2', 'Thứ 3', 'Thứ 4', 'Thứ 5', 'Thứ 6', 'Thứ 7'];
+    return daysFull[dateObj.getDay()];
+  }, [nextSolarDate]);
+
   // 3. Truy xuất thông tin gia đình
   const father = members.find(m => m.id === member.father_id);
   const mother = members.find(m => m.id === member.mother_id);
@@ -130,10 +138,11 @@ const MemberDetailModal: React.FC<Props> = ({ member, members, onClose }) => {
                       <p className="text-2xl font-black text-orange-900 mt-1">{member.lunar_death_date}</p>
                     </div>
                     {nextSolarDate && (
-                      <div className="flex-1 p-4 bg-blue-50 rounded-2xl border border-blue-100 text-center shadow-sm relative overflow-hidden">
+                      <div className="flex-1 p-4 bg-blue-50 rounded-2xl border border-blue-100 text-center shadow-sm relative overflow-hidden flex flex-col justify-center">
                         <div className="absolute top-0 right-0 bg-blue-500 text-white text-[8px] font-black px-2 py-0.5 rounded-bl-lg uppercase">Sắp tới</div>
                         <p className="text-[10px] text-blue-600 font-black uppercase tracking-widest">Giỗ Dương Lịch {nextSolarDate.split('/')[2]}</p>
                         <p className="text-2xl font-black text-blue-900 mt-1">{nextSolarDate.split('/').slice(0,2).join('/')}</p>
+                        <p className="text-[11px] font-bold text-blue-700 mt-1 uppercase tracking-widest">{nextSolarDayOfWeekFull}</p>
                       </div>
                     )}
                   </div>

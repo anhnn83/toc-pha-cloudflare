@@ -1,4 +1,4 @@
-// src/components/TreeView.tsx -- version 3.2 (Responsive Anniversary Table)
+// src/components/TreeView.tsx -- version 3.3
 
 import React, { useMemo, useRef, useState } from 'react';
 import { Tree, TreeNode } from 'react-organizational-chart';
@@ -44,9 +44,16 @@ const TreeView: React.FC<{ members: Member[] }> = ({ members }) => {
       .map(m => {
         const solarDateStr = getNextSolarAnniversary(m.lunar_death_date);
         let solarTimestamp = Infinity;
+        let dayOfWeekShort = ''; // <-- THÊM MỚI: Biến lưu Thứ viết tắt
+
         if (solarDateStr) {
            const [dd, mm, yyyy] = solarDateStr.split('/');
-           solarTimestamp = new Date(parseInt(yyyy), parseInt(mm) - 1, parseInt(dd)).getTime();
+           const dateObj = new Date(parseInt(yyyy), parseInt(mm) - 1, parseInt(dd));
+           solarTimestamp = dateObj.getTime();
+           
+           // <-- THÊM MỚI: Mảng ánh xạ thứ trong tuần
+           const daysShort = ['CN', 'T2', 'T3', 'T4', 'T5', 'T6', 'T7'];
+           dayOfWeekShort = daysShort[dateObj.getDay()];
         }
         return {
           id: m.id,
@@ -54,7 +61,8 @@ const TreeView: React.FC<{ members: Member[] }> = ({ members }) => {
           alias: m.alias || m.nickname,
           lunarDate: m.lunar_death_date,
           solarDateStr,
-          solarTimestamp
+          solarTimestamp,
+          dayOfWeekShort // <-- THÊM MỚI: Đẩy vào object kết quả
         };
       })
       .filter(item => item.solarDateStr !== null);
@@ -246,7 +254,10 @@ const TreeView: React.FC<{ members: Member[] }> = ({ members }) => {
                                                 {item.alias && <span className="text-stone-400 font-normal italic ml-1">({item.alias})</span>}
                                             </td>
                                             <td className="p-3 text-center font-bold text-orange-700 whitespace-nowrap">{item.lunarDate}</td>
-                                            <td className="p-3 text-right font-black text-blue-700 bg-blue-50/20 whitespace-nowrap">{item.solarDateStr}</td>
+                                            <td className="p-3 text-right font-black text-blue-700 bg-blue-50/20 whitespace-nowrap">
+                                              <span className="text-blue-500/70 font-bold mr-1">{item.dayOfWeekShort},</span>
+                                              {item.solarDateStr}
+                                          </td>
                                         </tr>
                                     ))}
                                 </tbody>
