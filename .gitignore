@@ -22,6 +22,7 @@ build/
 .env.*
 !.env.example
 .dev.vars
+wrangler.toml
 
 # ==========================================
 # 4. LOGS & FILE RÁC CỦA HỆ ĐIỀU HÀNH
