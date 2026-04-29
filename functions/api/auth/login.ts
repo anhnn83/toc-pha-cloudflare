@@ -1,26 +1,53 @@
-// /functions/api/auth/login.ts -- version 2.0 (Fix Missing Auth Payload)
+// /functions/api/auth/login.ts -- version 2.1 (Added KV Rate Limiting)
 
 interface Env {
   DB: D1Database;
   JWT_SECRET: string;
+  KV: KVNamespace; // Khai báo thêm biến KV Namespace đã cấu hình trong wrangler.toml
 }
 
 export const onRequestPost: PagesFunction<Env> = async (context) => {
   const { request, env } = context;
 
   try {
+    // --- BƯỚC 1: KIỂM TRA RATE LIMIT (BẰNG IP) ---
+    // Lấy IP của người dùng do Cloudflare cung cấp
+    const clientIP = request.headers.get("CF-Connecting-IP") || "unknown_ip";
+    const kvKey = `login_attempts:${clientIP}`;
+    
+    let attempts = 0;
+    const attemptsStr = await env.KV.get(kvKey);
+    if (attemptsStr) {
+      attempts = parseInt(attemptsStr, 10);
+    }
+
+    // Nếu đã nhập sai từ 5 lần trở lên, khóa chặn luôn không cho đi tiếp
+    if (attempts >= 5) {
+      return new Response(
+        JSON.stringify({ error: "Bạn đã nhập sai quá 5 lần. Để bảo mật, vui lòng thử lại sau 30 phút!" }), 
+        { 
+          status: 429, // 429: Too Many Requests
+          headers: { "Content-Type": "application/json" }
+        }
+      );
+    }
+    // ------------------------------------------------
+
     const { pin } = await request.json() as any;
     if (!pin) throw new Error("Vui lòng nhập mã PIN");
 
     const pinHash = await sha256(pin);
 
-    // 1. Kiểm tra Mod / SM trong bảng permissions
+    // --- BƯỚC 2: KIỂM TRA TÀI KHOẢN (TRƯỞNG TỘC / MOD) ---
     const user = await env.DB.prepare(
       "SELECT role, mod_name, branch_root_id FROM permissions WHERE pin_hash = ?"
     ).bind(pinHash).first() as { role: string; mod_name: string; branch_root_id: string } | null;
 
     if (user) {
-      // Ký JWT và trả về đầy đủ các trường dữ liệu để Frontend định tuyến
+      // Đăng nhập thành công -> Xóa lịch sử nhập sai của IP này
+      await env.KV.delete(kvKey);
+
+      // Ký JWT và trả về dữ liệu
       const token = await signJWT(user, env.JWT_SECRET || "default_secret_key");
       
       return new Response(JSON.stringify({
@@ -37,12 +64,15 @@ export const onRequestPost: PagesFunction<Env> = async (context) => {
       });
     }
 
-    // 2. Kiểm tra View PIN của Khách (Guest)
+    // --- BƯỚC 3: KIỂM TRA TÀI KHOẢN KHÁCH (GUEST) ---
     const guestSetting = await env.DB.prepare(
       "SELECT value FROM system_settings WHERE key = 'view_pin_hash'"
     ).first() as { value: string } | null;
 
     if (guestSetting && guestSetting.value === pinHash) {
+      // Đăng nhập thành công -> Xóa lịch sử nhập sai của IP này
+      await env.KV.delete(kvKey);
+
       const token = await signJWT({ role: 'guest' }, env.JWT_SECRET || "default_secret_key");
       
       return new Response(JSON.stringify({ success: true, role: 'guest' }), {
@@ -54,9 +84,24 @@ export const onRequestPost: PagesFunction<Env> = async (context) => {
       });
     }
 
-    return new Response(JSON.stringify({ error: "Mã PIN không chính xác" }), { status: 401 });
+    // --- BƯỚC 4: XỬ LÝ KHI NHẬP SAI MÃ PIN ---
+    attempts += 1;
+    // Ghi số lần nhập sai vào KV, tự động hết hạn (xóa) sau 1800 giây (30 phút)
+    await env.KV.put(kvKey, attempts.toString(), { expirationTtl: 1800 });
+    
+    return new Response(
+      JSON.stringify({ error: `Mã PIN không chính xác (Sai ${attempts}/5 lần)` }), 
+      { 
+        status: 401,
+        headers: { "Content-Type": "application/json" }
+      }
+    );
+
   } catch (err: any) {
-    return new Response(JSON.stringify({ error: err.message }), { status: 500 });
+    return new Response(JSON.stringify({ error: err.message }), { 
+      status: 500,
+      headers: { "Content-Type": "application/json" }
+    });
   }
 };
 
