@@ -1,4 +1,4 @@
-// src/components/TreeShare.tsx -- version 3.5 (Final Clean Code with D1 Mapping & Heir Logic)
+// src/components/TreeShare.tsx -- version 3.6 (Fixed Stepchild Icon & Heir Logic)
 
 import React, { useMemo, useState } from 'react';
 import { User, Target } from 'lucide-react';
@@ -117,7 +117,8 @@ export const MemberCardBase: React.FC<BaseCardProps> = ({
     const fatherName = fatherRaw ? (fatherRaw.fullName || fatherRaw.full_name) : null;
     const motherName = motherRaw ? (motherRaw.fullName || motherRaw.full_name) : null;
 
-    let indicator = person.relationType === 'biological' ? '🩸' : '👨‍👧';
+    // --- BẢN VÁ: Con riêng và Con ruột đều dùng icon giọt máu ---
+    let indicator = (person.relationType === 'biological' || person.relationType === 'step') ? '🩸' : '👨‍👧';
     let text = '';
     
     if (fatherName && motherName) text = `Con ông ${getShortName(fatherName)} & bà ${getShortName(motherName)}`;
