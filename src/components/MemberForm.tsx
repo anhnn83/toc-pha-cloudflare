@@ -1,4 +1,4 @@
-// src/components/MemberForm.tsx -- version 3.7 (Fixed Bidirectional Marriage Loop Bug)
+// src/components/MemberForm.tsx -- version 3.8 (Final Polish & Bulletproof Constraints)
 
 import React, { useState, useEffect, useRef, useMemo } from 'react';
 import { Save, X, Trash2, HelpCircle, UploadCloud, User, Loader2, AlertCircle, Info } from 'lucide-react';
@@ -46,18 +46,17 @@ const parseLunarDate = (dateStr?: string | null) => {
 
 const MemberForm: React.FC<MemberFormProps> = ({ member, allMembers, onSave, onCancel, onDelete, isNew, authorInfo }) => {
   
-  // --- BẢN VÁ LỖI NGHIÊM TRỌNG V3.7: XỬ LÝ VÒNG LẶP QUAN HỆ 2 CHIỀU ---
+  // --- BẢO VỆ DỮ LIỆU TUYỆT ĐỐI (TRÁNH LỖI VÒNG LẶP HÔN NHÂN 2 CHIỀU) ---
   const CHILD_TYPES = ['biological', 'adopted', 'step'];
   
-  // 1. Đọc relation gốc từ dữ liệu truyền vào
+  // 1. Lấy trạng thái gốc
   const rawRelation = member.relation_status || member.relationType || 'biological';
   const isOverriddenSpouse = ['current', 'divorced'].includes(rawRelation);
   
-  // 2. Xác định CHÍNH XÁC có phải Dâu/Rể không DỰA TRÊN relation của chính họ (hoặc cờ truyền vào từ Admin)
+  // 2. Chốt hạ: Có phải Dâu/Rể không? (Chỉ dựa vào bản thân họ)
   const isActuallyInLaw = !!member._bloodlineSpouseId || isOverriddenSpouse || rawRelation === 'in_law';
   
-  // 3. CHỈ TÌM vợ/chồng trực hệ NẾU người này đã được xác nhận là Dâu/Rể.
-  // (Tuyệt đối không quét ngược lại khiến người trực hệ tự biến thành dâu/rể)
+  // 3. CHỈ khi đã xác nhận là Dâu/Rể, mới đi tìm vợ/chồng Trực hệ để điền vào form
   const foundSpouseTarget = isActuallyInLaw 
     ? allMembers.find(m => 
         m.spouses?.some((s: any) => s.id === member.id) && 
@@ -66,10 +65,8 @@ const MemberForm: React.FC<MemberFormProps> = ({ member, allMembers, onSave, onC
     : null;
 
   const isActuallyChild = !isActuallyInLaw && (!!member.father_id || !!member.mother_id || CHILD_TYPES.includes(rawRelation));
-  
   const initRelationStatus = isActuallyInLaw ? 'in_law' : (isOverriddenSpouse ? 'in_law' : rawRelation);
 
-  // KHÓA TUYỆT ĐỐI (KHÔNG CẦN BIẾT LÀ THÊM MỚI HAY SỬA)
   const isLockedAsChild = isActuallyChild;
   const isLockedAsInLaw = isActuallyInLaw;
 
@@ -366,8 +363,8 @@ const MemberForm: React.FC<MemberFormProps> = ({ member, allMembers, onSave, onC
                 {isLockedAsChild && (
                   <p className={`text-[10px] mt-1 font-bold flex items-center gap-1 ${isNew ? 'text-blue-600' : 'text-red-500'}`}>
                     {isNew ? <Info size={12} /> : <AlertCircle size={12} />} 
-                    {isNew && parentInfo 
-                      ? `Đang thêm Con cho ${parentInfo.bloodline.gender === 'M' ? 'Ông' : 'Bà'} ${parentInfo.bloodline.full_name || parentInfo.bloodline.fullName}`
+                    {isNew 
+                      ? (parentInfo ? `Đang thêm Con cho ${parentInfo.bloodline.gender === 'M' ? 'Ông' : 'Bà'} ${parentInfo.bloodline.full_name || parentInfo.bloodline.fullName}` : 'Đang thêm Gốc gia phả (Thủy Tổ)')
                       : 'Không thể chuyển đổi Con thành Dâu/Rể'}
                   </p>
                 )}
