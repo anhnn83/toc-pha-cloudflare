@@ -1,4 +1,4 @@
-// /functions/api/system/security.ts -- version 1.6 (Orphaned Data Prevention)
+// /functions/api/system/security.ts -- version 1.7 (Fixed DB Schema Mapping & Orphaned Data Prevention)
 interface Env {
   DB: D1Database;
   BUCKET: R2Bucket;
@@ -156,23 +156,22 @@ export const onRequestPost: PagesFunction<Env, any, { user: any }> = async (cont
       case 'HARD_DELETE_MEMBER': {
         if (user.role !== 'sm') throw new Error("Chỉ Trưởng tộc mới có quyền xóa vĩnh viễn");
         
-        // --- BẢN VÁ: RÀNG BUỘC KÉP TRÁNH DỮ LIỆU MỒ CÔI TẠI DB ---
         // 1. Lấy thông tin thành viên đang bị yêu cầu xóa
         const member = await env.DB.prepare("SELECT full_name, avatar_url, relation_status FROM members WHERE id = ?").bind(payload.id).first() as any;
         if (!member) throw new Error("Không tìm thấy thành viên!");
 
-        // 2. Chặn nếu có con cái
+        // 2. Chặn nếu có con cái (Kiểm tra father_id / mother_id)
         const deps = await env.DB.prepare("SELECT id FROM members WHERE (father_id = ? OR mother_id = ?) AND is_deleted = 0 LIMIT 1")
           .bind(payload.id, payload.id).first();
         if (deps) throw new Error("Thành viên đang có con, không thể xóa cứng!");
         
-        // 3. Chặn xóa thành viên Trực hệ nếu họ vẫn còn Dâu/Rể trong CSDL (dù đã ở trong Thùng rác)
+        // 3. BẢN VÁ: Dùng member_id và spouse_id theo đúng schema.sql
         if (member.relation_status !== 'in_law') {
            const inLawDeps = await env.DB.prepare(`
              SELECT m.id 
              FROM marriages mr
-             JOIN members m ON (m.id = mr.husband_id OR m.id = mr.wife_id)
-             WHERE (mr.husband_id = ? OR mr.wife_id = ?)
+             JOIN members m ON (m.id = mr.member_id OR m.id = mr.spouse_id)
+             WHERE (mr.member_id = ? OR mr.spouse_id = ?)
                AND m.id != ?
                AND m.relation_status = 'in_law'
              LIMIT 1
@@ -180,7 +179,7 @@ export const onRequestPost: PagesFunction<Env, any, { user: any }> = async (cont
            if (inLawDeps) throw new Error("Thành viên trực hệ này đang có dữ liệu Dâu/Rể liên kết. Vui lòng xóa vĩnh viễn Dâu/Rể đó trước!");
         }
         
-        // 4. Dọn rác R2
+        // 4. Dọn rác R2 (Lưu trữ ảnh)
         if (member.avatar_url) {
           const fileName = member.avatar_url.split('/').pop()?.split('?')[0];
           if (fileName) {
@@ -204,8 +203,10 @@ export const onRequestPost: PagesFunction<Env, any, { user: any }> = async (cont
           }
         }
 
-        // 5. Tự động xóa sạch Hợp đồng hôn nhân (marriages) & Xóa thành viên
-        await env.DB.prepare("DELETE FROM marriages WHERE husband_id = ? OR wife_id = ?").bind(payload.id, payload.id).run();
+        // 5. BẢN VÁ: Dọn rác Hợp đồng hôn nhân với member_id và spouse_id
+        await env.DB.prepare("DELETE FROM marriages WHERE member_id = ? OR spouse_id = ?").bind(payload.id, payload.id).run();
+        
+        // 6. Xóa dứt điểm thành viên
         await env.DB.prepare("DELETE FROM members WHERE id = ?").bind(payload.id).run();
         
         await logAudit(env.DB, authorName, "Xóa vĩnh viễn", member.full_name || payload.id);
