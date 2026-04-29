@@ -1,163 +1,231 @@
-// src/App.tsx -- Final Version (Tích hợp PWA, Offline Mode & Full Metadata)
+// src/App.tsx -- version 2.4 (Fix TS Warnings & Imports)
 
-import { useEffect, useState } from 'react';
-import { Users, ShieldCheck, TreeDeciduous, CircleAlert, Info } from 'lucide-react';
+import { useEffect, useState, useCallback } from 'react';
+import { Users, ShieldCheck, TreeDeciduous, CircleAlert, Info, Crown, Lock, Loader2 } from 'lucide-react';
 import TreeView from './components/TreeView';
 import { Admin } from './pages/Admin';
 import About from './components/About';
-import AdminSetup from './components/AdminSetup';
-import { GitHubService } from './utils/githubService';
+import MemberForm from './components/MemberForm';
 
 function App() {
-  // --- QUẢN LÝ QUYỀN TRUY CẬP TRUNG TÂM ---
-  const [auth, setAuth] = useState<{ service: GitHubService; role: string; user: any; rawToken?: string } | null>(null);
+  const [auth, setAuth] = useState<{ role: string; mod_name?: string; rootId?: string } | null>(null);
+  const [isGuestLocked, setIsGuestLocked] = useState(false);
+  const [guestPin, setGuestPin] = useState('');
   
-  // --- STATE DỮ LIỆU TOÀN CỤC ---
   const [members, setMembers] = useState<any[]>([]);
-  const [metadata, setMetadata] = useState<any>(null);
+  const [settings, setSettings] = useState<any>({});
   const [familyName, setFamilyName] = useState("GIA PHẢ TRỰC TUYẾN");
+  
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
-
-  // --- TRẠNG THÁI MẠNG (PWA OFFLINE MODE) ---
   const [isOffline, setIsOffline] = useState(!navigator.onLine);
+  const [tab, setTab] = useState<'view' | 'intro' | 'admin'>('view');
+  const [isInitializingRoot, setIsInitializingRoot] = useState(false);
 
-  const [tab, setTab] = useState<'view' | 'intro' | 'admin' | 'setup'>(() => {
-    if (window.location.pathname === '/adminsetup') return 'setup';
-    return 'view';
-  });
+  // 1. Tự động đếm lượt truy cập (Chạy ngầm không ảnh hưởng UI)
+  useEffect(() => {
+    fetch('/api/system/track', { method: 'POST' }).catch(() => {});
+  }, []);
 
-  // 1. Lắng nghe thay đổi trạng thái mạng
   useEffect(() => {
     const handleOnline = () => setIsOffline(false);
     const handleOffline = () => setIsOffline(true);
-
     window.addEventListener('online', handleOnline);
     window.addEventListener('offline', handleOffline);
-
     return () => {
       window.removeEventListener('online', handleOnline);
       window.removeEventListener('offline', handleOffline);
     };
   }, []);
 
-  // 2. Logic Tải dữ liệu thông minh
-  useEffect(() => {
-    const loadData = async () => {
-      try {
-        const localDraft = localStorage.getItem('mock_git_data.json');
-        let data: any;
+  const refreshData = useCallback(async () => {
+    try {
+      setLoading(true);
+      setError(null);
+
+      const resSettings = await fetch('/api/system/settings');
+      if (resSettings.ok) {
+        const dataSettings = (await resSettings.json()) as any[]; 
+        const settingsMap = dataSettings.reduce((acc: any, curr: any) => ({ ...acc, [curr.key]: curr.value }), {});
+        setSettings(settingsMap);
+        if (settingsMap.family_name) setFamilyName(settingsMap.family_name.toUpperCase());
         
-        if (localDraft) {
-          data = JSON.parse(localDraft);
-          console.log("🚀 Đang sử dụng dữ liệu từ bản nháp Local (LocalStorage)");
-        } else {
-          const response = await fetch('/data.json');
-          if (!response.ok) throw new Error("Không thể tải tệp dữ liệu gốc.");
-          data = await response.json();
+        if (settingsMap.view_pin_hash && !auth) {
+          setIsGuestLocked(true);
+          setLoading(false);
+          return;
         }
-
-        setMembers(data.members || []);
-        setMetadata(data.metadata || null); 
-        if (data.metadata?.familyName) setFamilyName(data.metadata.familyName.toUpperCase());
-        setLoading(false);
-      } catch (err: any) {
-        setError(err.message);
-        setLoading(false);
       }
-    };
 
-    loadData();
-  }, []);
+      const resMembers = await fetch('/api/members');
+      if (!resMembers.ok) {
+        if (resMembers.status === 401) setIsGuestLocked(true);
+        throw new Error("Không thể tải dữ liệu gia phả.");
+      }
+      
+      const dataMembers = (await resMembers.json()) as any[];
+      setMembers(dataMembers || []);
+      setIsGuestLocked(false);
+    } catch (err: any) {
+      setError(err.message);
+    } finally {
+      setLoading(false);
+    }
+  }, [auth]);
+
+  useEffect(() => {
+    refreshData();
+  }, [refreshData]);
+
+  const handleGuestLogin = async () => {
+    if (!guestPin) return;
+    try {
+      const res = await fetch('/api/auth/login', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ pin: guestPin })
+      });
+      const data = (await res.json()) as any;
+      
+      if (res.ok && data.role === 'guest') {
+        setAuth({ role: 'guest', mod_name: 'Khách' });
+        setIsGuestLocked(false);
+        refreshData();
+      } else {
+        alert(data.error || "Mã PIN không hợp lệ");
+      }
+    } catch (err) { alert("Lỗi kết nối máy chủ"); }
+  };
+
+  const handleSaveRoot = async (formData: any, newImageBase64?: string) => {
+    try {
+      setLoading(true);
+      let finalAvatarUrl = null;
+
+      if (newImageBase64) {
+        const blob = await (await fetch(newImageBase64)).blob();
+        const uploadForm = new FormData();
+        uploadForm.append('file', blob, `${formData.id}.webp`);
+        const uploadRes = await fetch('/api/upload', { method: 'POST', body: uploadForm });
+        const uploadData = (await uploadRes.json()) as any;
+        if (uploadData.success) finalAvatarUrl = uploadData.url;
+      }
+
+      const res = await fetch('/api/members', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ ...formData, avatar_url: finalAvatarUrl })
+      });
+
+      if (res.ok) {
+        setIsInitializingRoot(false);
+        refreshData();
+      } else {
+        const errorData = (await res.json()) as any;
+        alert(errorData.error || "Lỗi khi tạo Thủy Tổ");
+      }
+    } catch (err) { alert("Lỗi kết nối máy chủ"); } finally { setLoading(false); }
+  };
+
+  if (isGuestLocked) {
+    return (
+      <div className="fixed inset-0 bg-stone-100 flex flex-col items-center justify-center p-6 text-center">
+        <div className="bg-white p-8 rounded-[2rem] shadow-2xl shadow-[#704214]/10 w-full max-w-sm space-y-6 animate-in zoom-in-95">
+          <div className="inline-flex p-5 bg-[#704214]/10 text-[#704214] rounded-full"><Lock size={36} /></div>
+          <div>
+            <h2 className="text-2xl font-black text-stone-800 uppercase tracking-tighter">Gia phả nội bộ</h2>
+            <p className="text-[11px] mt-1 text-stone-500 font-bold uppercase tracking-widest">Yêu cầu mã truy cập từ Trưởng tộc</p>
+          </div>
+          <input 
+            type="password" maxLength={4} placeholder="••••"
+            className="w-full p-5 text-4xl text-center tracking-[1em] font-mono border-2 border-stone-200 rounded-3xl focus:border-[#704214] focus:ring-4 ring-[#704214]/10 outline-none transition-all"
+            value={guestPin} onChange={(e) => setGuestPin(e.target.value)}
+            onKeyDown={(e) => e.key === 'Enter' && handleGuestLogin()}
+          />
+          <button onClick={handleGuestLogin} className="w-full py-5 bg-[#704214] text-white rounded-2xl font-black uppercase shadow-xl shadow-[#704214]/30 hover:scale-105 transition-transform text-xs tracking-widest">Mở Khóa Gia Phả</button>
+        </div>
+      </div>
+    );
+  }
 
   return (
-    <div className="fixed inset-0 bg-stone-100 flex flex-col overflow-hidden font-sans select-none">
-      
-      {/* HEADER HỆ THỐNG */}
-      <header className="bg-white p-4 shadow-md text-center border-b-4 border-[#704214] z-30">
-        <h1 className="text-xl font-black text-[#704214] flex flex-wrap items-center justify-center gap-2 tracking-tighter">
-          <TreeDeciduous size={28} /> 
-          <span>{familyName}</span>
-          
-          {/* Badge Trạng thái Đăng nhập */}
-          {auth && !isOffline && (
-            <span className="text-[9px] bg-green-100 text-green-700 px-2 py-0.5 rounded-full animate-pulse border border-green-200 uppercase tracking-widest ml-1">
-              Live Cloud
-            </span>
-          )}
-          
-          {/* Badge Trạng thái Mất mạng */}
-          {isOffline && (
-            <span className="text-[9px] bg-amber-100 text-amber-700 px-2 py-0.5 rounded-full border border-amber-200 uppercase tracking-widest ml-1 font-black">
-              📴 Ngoại tuyến
-            </span>
-          )}
+    <div className="fixed inset-0 bg-[#f8f7f5] flex flex-col overflow-hidden font-sans select-none">
+      <header className="bg-white p-4 shadow-sm text-center border-b-2 border-stone-200 z-30 flex items-center justify-center gap-3">
+        <h1 className="text-lg font-black text-[#704214] flex flex-wrap items-center justify-center gap-2 tracking-tighter uppercase">
+          <TreeDeciduous size={24} /> {familyName}
         </h1>
+        {!isOffline ? (
+          <span className="text-[9px] bg-green-50 text-green-700 px-2 py-1 rounded-md font-black border border-green-200 uppercase tracking-widest ml-1 shadow-sm"><span className="animate-pulse inline-block mr-1">●</span> Live</span>
+        ) : (
+          <span className="text-[9px] bg-amber-50 text-amber-700 px-2 py-1 rounded-md border border-amber-200 uppercase tracking-widest ml-1 font-black shadow-sm">📴 Offline</span>
+        )}
       </header>
 
-      {/* VÙNG NỘI DUNG CHÍNH */}
       <main className="flex-1 relative overflow-hidden bg-[#f8f7f5]">
         {tab === 'view' ? (
           loading ? (
-            <div className="h-full flex items-center justify-center animate-pulse text-stone-400 font-bold uppercase text-xs tracking-widest">
-              Đang khởi tạo cây...
+            <div className="h-full flex flex-col items-center justify-center gap-4">
+               <Loader2 size={32} className="animate-spin text-[#704214]" />
+               <p className="text-[10px] font-black uppercase text-stone-400 tracking-widest">Đang tải dữ liệu...</p>
             </div>
           ) : error ? (
-            <div className="h-full flex flex-col items-center justify-center text-red-500 p-10 text-center space-y-3">
-              <CircleAlert size={40} />
+            <div className="h-full flex flex-col items-center justify-center text-red-500 p-10 text-center space-y-4">
+              <CircleAlert size={48} />
               <p className="font-black uppercase text-sm tracking-tight">{error}</p>
-              <button onClick={() => window.location.reload()} className="text-[10px] bg-stone-200 px-4 py-2 rounded-lg font-bold hover:bg-stone-300 transition-colors">
-                THỬ LẠI
+              <button onClick={refreshData} className="text-[10px] bg-stone-200 px-5 py-3 rounded-xl font-black uppercase hover:bg-stone-300 text-stone-700 shadow-sm transition-colors">Thử lại</button>
+            </div>
+          ) : members.length === 0 ? (
+            <div className="h-full flex flex-col items-center justify-center p-6 space-y-8 bg-white">
+              <div className="p-8 bg-amber-50 text-amber-600 rounded-full animate-bounce shadow-inner border border-amber-100"><Crown size={56} /></div>
+              <div className="text-center space-y-2">
+                <h2 className="text-2xl font-black text-stone-800 uppercase tracking-tighter">Gia phả trống</h2>
+                <p className="text-sm font-bold text-stone-500 max-w-sm mx-auto">Cơ sở dữ liệu chưa có bất kỳ thành viên nào. Hãy bắt đầu bằng việc khởi tạo người đứng đầu gia tộc.</p>
+              </div>
+              <button 
+                onClick={() => setIsInitializingRoot(true)} 
+                className="py-5 px-10 bg-[#704214] text-white rounded-2xl font-black text-sm uppercase shadow-2xl hover:scale-105 transition-transform tracking-widest"
+              >
+                👑 Tạo Thủy Tổ (Đời 1)
               </button>
             </div>
           ) : (
             <TreeView members={members} />
           )
         ) : tab === 'intro' ? (
-          <About 
-            aboutFamily={metadata?.aboutFamily || ""} 
-            familyPhotos={metadata?.familyPhotos || []} 
-          />
-        ) : tab === 'admin' ? (
+          <About aboutFamily={settings.about_family} familyPhotos={settings.family_photos ? JSON.parse(settings.family_photos) : []} />
+        ) : (
           <Admin 
             onBack={() => setTab('view')} 
             globalMembers={members} 
-            setGlobalMembers={setMembers}
-            auth={auth}
-            setAuth={setAuth}
+            auth={auth} 
+            setAuth={setAuth} 
             isOffline={isOffline}
+            refreshData={refreshData} 
           />
-        ) : (
-          <AdminSetup />
         )}
       </main>
 
-      {/* THANH ĐIỀU HƯỚNG DƯỚI */}
-      <nav className="bg-white border-t border-stone-200 flex justify-around p-4 shadow-inner z-30">
-        <button 
-          onClick={() => setTab('view')} 
-          className={`flex flex-col items-center gap-1 transition-all ${tab === 'view' ? 'text-[#704214] scale-110 font-bold' : 'text-stone-400'}`}
-        >
-          <Users size={24} /> 
-          <span className="text-[10px] uppercase font-black tracking-widest">Xem Gia Phả</span>
+      <nav className="bg-white border-t border-stone-200 flex justify-around p-3 sm:p-4 shadow-[0_-4px_20px_rgba(0,0,0,0.02)] z-30 relative pb-safe">
+        <button onClick={() => setTab('view')} className={`flex flex-col items-center gap-1.5 transition-all ${tab === 'view' ? 'text-[#704214] scale-110 font-bold' : 'text-stone-400 hover:text-stone-600'}`}>
+          <Users size={22} /> <span className="text-[9px] sm:text-[10px] uppercase font-black tracking-widest">Cây Gia Phả</span>
         </button>
-
-        <button 
-          onClick={() => setTab('intro')} 
-          className={`flex flex-col items-center gap-1 transition-all ${tab === 'intro' ? 'text-[#704214] scale-110 font-bold' : 'text-stone-400'}`}
-        >
-          <Info size={24} /> 
-          <span className="text-[10px] uppercase font-black tracking-widest">Giới Thiệu</span>
+        <button onClick={() => setTab('intro')} className={`flex flex-col items-center gap-1.5 transition-all ${tab === 'intro' ? 'text-[#704214] scale-110 font-bold' : 'text-stone-400 hover:text-stone-600'}`}>
+          <Info size={22} /> <span className="text-[9px] sm:text-[10px] uppercase font-black tracking-widest">Giới Thiệu</span>
         </button>
-        
-        <button 
-          onClick={() => setTab('admin')} 
-          className={`flex flex-col items-center gap-1 transition-all ${tab === 'admin' ? 'text-[#704214] scale-110 font-bold' : 'text-stone-400'}`}
-        >
-          <ShieldCheck size={24} /> 
-          <span className="text-[10px] uppercase font-black tracking-widest">Quản Trị</span>
+        <button onClick={() => setTab('admin')} className={`flex flex-col items-center gap-1.5 transition-all ${tab === 'admin' ? 'text-[#704214] scale-110 font-bold' : 'text-stone-400 hover:text-stone-600'}`}>
+          <ShieldCheck size={22} /> <span className="text-[9px] sm:text-[10px] uppercase font-black tracking-widest">Quản Trị</span>
         </button>
       </nav>
+
+      {isInitializingRoot && (
+        <MemberForm 
+          member={{ id: `P${Date.now()}`, gender: 'M', relation_status: 'biological', is_alive: 1 }} 
+          allMembers={[]} isNew={true}
+          onCancel={() => setIsInitializingRoot(false)}
+          onSave={handleSaveRoot}
+          authorInfo={{ role: 'super', name: 'Hệ thống' }}
+        />
+      )}
     </div>
   );
 }

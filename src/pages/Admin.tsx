@@ -1,327 +1,271 @@
-// src/pages/Admin.tsx -- Version 5.7
+// src/pages/Admin.tsx -- version 3.7 (Explicit About Tab & Photo Upload Form)
 
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useCallback, useRef } from 'react';
 import { 
-  Lock, LogOut, CheckCircle2, 
-  Loader2, ShieldAlert, X, Save, Copy, History, Clock, WifiOff
+  Lock, Unlock, LogOut, Loader2, X, History, Clock, Trash2, 
+  RefreshCcw, Database, ShieldCheck, Download, 
+  Upload, Image as ImageIcon, LayoutDashboard, Save, Key, UploadCloud, Plus
 } from 'lucide-react';
-import { hashPIN, decryptToken, encryptToken } from '../utils/security';
-import { GitHubService } from '../utils/githubService';
 import MemberForm from '../components/MemberForm';
 import TreeViewAdmin from '../components/TreeViewAdmin';
 
 interface AdminProps { 
   onBack: () => void; 
   globalMembers: any[]; 
-  setGlobalMembers: React.Dispatch<React.SetStateAction<any[]>>;
-  auth: { service: GitHubService; role: string; user: any; rawToken?: string } | null;
+  auth: { role: string; mod_name?: string; rootId?: string } | null;
   setAuth: (auth: any) => void;
-  isOffline: boolean; // Bổ sung prop nhận trạng thái mạng từ App.tsx
+  isOffline: boolean;
+  refreshData: () => Promise<void>;
 }
 
-export const Admin: React.FC<AdminProps> = ({ onBack, globalMembers, setGlobalMembers, auth, setAuth, isOffline }) => {
-  const [pin, setPin] = useState('');
-  const [config, setConfig] = useState<any>(null);
-  const [error, setError] = useState<string | null>(null);
+type AdminTab = 'tree' | 'security' | 'system' | 'about';
 
-  const [attempts, setAttempts] = useState(0);
-  const [lockUntil, setLockUntil] = useState<number | null>(null);
+export const Admin: React.FC<AdminProps> = ({ 
+  onBack, globalMembers, auth, setAuth, isOffline, refreshData 
+}) => {
+  const [pin, setPin] = useState('');
+  const [error, setError] = useState<string | null>(null);
   
+  // UI States
+  const [activeTab, setActiveTab] = useState<AdminTab>('tree');
   const [editingMember, setEditingMember] = useState<any>(null);
   const [formMode, setFormMode] = useState<'edit' | 'add' | null>(null);
   const [isSaving, setIsSaving] = useState(false);
-  const [loadingText, setLoadingText] = useState("Đang xử lý...");
+  
+  // System Data States
+  const [systemData, setSystemData] = useState<any>(null);
+  const [aboutData, setAboutData] = useState({ family_name: '', intro: '', photos: [] as any[] });
+  const [securityData, setSecurityData] = useState({ guestPin: '', smPin: '', newMod: { name: '', pin: '', rootId: '' } });
 
-  const [isFamilyModalOpen, setIsFamilyModalOpen] = useState(false);
-  const [tempName, setTempName] = useState("");
-  const [tempAbout, setTempAbout] = useState("");
-  const [tempPhotos, setTempPhotos] = useState<{url: string, caption: string}[]>([]);
+  // Photo Upload States
+  const [showPhotoForm, setShowPhotoForm] = useState(false);
+  const [newPhotoFile, setNewPhotoFile] = useState<File | null>(null);
+  const [newPhotoPreview, setNewPhotoPreview] = useState<string | null>(null);
+  const [newPhotoCaption, setNewPhotoCaption] = useState('');
+  const fileInputRef = useRef<HTMLInputElement>(null);
 
-  const [modModal, setModModal] = useState<{
-    isOpen: boolean; member: any; step: 1 | 2; modName: string; generatedPin: string;
-  }>({ isOpen: false, member: null, step: 1, modName: "", generatedPin: "" });
+  // 1. Xác thực đăng nhập
+  const handleLogin = async () => {
+    if (isOffline) { setError("Vui lòng kết nối mạng để đăng nhập!"); return; }
+    try {
+      const res = await fetch('/api/auth/login', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ pin })
+      });
+      const data = await res.json() as { role: string; mod_name?: string; branch_root_id?: string; error?: string };
+      if (res.ok) {
+        setAuth({ role: data.role, mod_name: data.mod_name, rootId: data.branch_root_id });
+        setPin('');
+        setError(null);
+      } else {
+        setError(data.error || "Mã PIN không chính xác");
+      }
+    } catch (err) { setError("Lỗi kết nối máy chủ"); }
+  };
 
-  const [isLogModalOpen, setIsLogModalOpen] = useState(false);
-  const [auditLogs, setAuditLogs] = useState<any[]>([]);
-  const [isLoadingLogs, setIsLoadingLogs] = useState(false);
-
-  const getActionAuthor = () => auth?.role === 'super' ? 'TRƯỞNG TỘC' : `MOD: ${auth?.user?.name}`;
+  // 2. Tải dữ liệu hệ thống (Chỉ SM)
+  const fetchSystemInfo = useCallback(async () => {
+    if (auth?.role !== 'sm' || isOffline) return;
+    try {
+      const res = await fetch('/api/system');
+      if (res.ok) {
+        const data: any = await res.json();
+        setSystemData(data);
+        const familyName = data.settings?.find((s: any) => s.key === 'family_name')?.value || 'GIA PHẢ TRỰC TUYẾN';
+        const about = data.settings?.find((s: any) => s.key === 'about_family')?.value || '';
+        const photos = JSON.parse(data.settings?.find((s: any) => s.key === 'family_photos')?.value || '[]');
+        setAboutData({ family_name: familyName, intro: about, photos });
+      }
+    } catch (err) { console.error("Lỗi tải dữ liệu hệ thống"); }
+  }, [auth, isOffline]);
 
   useEffect(() => {
-    fetch('/config.json')
-      .then(res => res.json())
-      .then(data => setConfig(data))
-      .catch(() => setError("Lỗi tải cấu hình!"));
-  }, []);
+    if (auth?.role === 'sm') fetchSystemInfo();
+  }, [auth, fetchSystemInfo, activeTab]);
 
-  const handleLogin = () => {
-    // Thêm vào trong hàm handleLogin của Admin.tsx để test
-    console.log("Độ dài Salt trên Vercel:", (import.meta.env.VITE_APP_SALT || "").length);
-    if (!config) return;
-    if (isOffline) { setError("Vui lòng kết nối mạng!"); return; }
-
-    // 1. Kiểm tra trạng thái khóa (Cooldown)
-    if (lockUntil && Date.now() < lockUntil) {
-      const remaining = Math.ceil((lockUntil - Date.now()) / 1000);
-      setError(`Hệ thống đang khóa. Thử lại sau ${remaining} giây.`);
-      return;
-    }
-
-    const hashedInput = hashPIN(pin);
-    let role = '';
-    let userData = null;
-
-    if (config.permissions.super.includes(hashedInput)) {
-      role = 'super';
-    } else if (config.permissions.mods?.[hashedInput]) {
-      role = 'mod';
-      userData = config.permissions.mods[hashedInput];
-    }
-
-    if (role) {
-      // 2. Giải mã với Double Salt: Kết hợp Salt trong file và Salt từ Vercel
-      const secretSalt = config.auth.salt + (import.meta.env.VITE_APP_SALT || "");
-      const tokenToDecrypt = (role === 'mod' && userData.token) ? userData.token : config.auth.encryptedToken;
-      const rawToken = decryptToken(tokenToDecrypt, pin, secretSalt);
-      
-      if (rawToken) {
-        setAuth({ service: new GitHubService(rawToken), role, user: userData, rawToken });
-        setError(null);
-        setAttempts(0); // Reset số lần thử khi thành công
-        setPin('');
-      } else { 
-        handleFailedAttempt();
-        setError("Mã PIN đúng nhưng không thể giải mã dữ liệu!"); 
-      }
-    } else { 
-      handleFailedAttempt();
-    }
-  };
-
-  // Hàm xử lý khi nhập sai
-  const handleFailedAttempt = () => {
-    const newAttempts = attempts + 1;
-    setAttempts(newAttempts);
-    if (newAttempts >= 5) {
-      // Khóa tăng dần: 30s, 60s, 120s...
-      const waitTime = Math.pow(2, newAttempts - 5) * 30 * 1000; 
-      setLockUntil(Date.now() + waitTime);
-      setError(`Sai quá nhiều lần! Hệ thống tạm khóa ${waitTime/1000} giây.`);
-    } else {
-      setError(`Mã PIN không đúng! (Còn ${5 - newAttempts} lần thử)`);
-    }
-  };
-
-  const handleOpenLogs = async () => {
-    // Chặn nếu ngoại tuyến
-    if (!auth || isOffline) {
-      alert("Tính năng xem lịch sử yêu cầu kết nối mạng!");
-      return; 
-    }
-    setIsLoadingLogs(true);
-    setIsLogModalOpen(true);
-    try {
-      const commits = await auth.service.getCommits('public/data.json', 30);
-      setAuditLogs(commits);
-    } catch (err) {
-      alert("Không thể tải lịch sử!");
-      setIsLogModalOpen(false);
-    } finally {
-      setIsLoadingLogs(false);
-    }
-  };
-
-  const handleSaveMember = async (updatedData: any, newImageBase64?: string) => {
-    if (!auth || isOffline) return; // Bảo vệ API
+  // 3. Xử lý Thành viên (CUD)
+  const handleSaveMember = async (formData: any, newImageBase64?: string) => {
     setIsSaving(true);
-    setLoadingText("Đang đồng bộ cây...");
-
     try {
-      let finalMember = { ...updatedData };
-      let newFullList = [...globalMembers];
-
+      let finalAvatarUrl = formData.avatar_url;
       if (newImageBase64) {
-        const imagePath = `public/images/${finalMember.id}.webp`;
-        await auth.service.updateFile(imagePath, newImageBase64.split(',')[1], undefined, `[Ảnh] Cập nhật: ${finalMember.fullName}`);
-      }
-      finalMember.avatarUrl = `/images/${finalMember.id}.webp`;
-
-      if (finalMember.relationType === 'in_law' && finalMember._bloodlineSpouseId) {
-        const bloodlineId = finalMember._bloodlineSpouseId;
-        const marriageStatus = finalMember._marriageStatus || 'current';
-        newFullList = newFullList.map(m => {
-          if (m.id === bloodlineId) {
-            const existingSpouses = m.spouses || [];
-            const isAlreadyIn = existingSpouses.some((s: any) => s.id === finalMember.id);
-            if (isAlreadyIn) {
-              return { ...m, spouses: existingSpouses.map((s: any) => s.id === finalMember.id ? { ...s, status: marriageStatus } : s) };
-            } else {
-              return { ...m, spouses: [...existingSpouses, { id: finalMember.id, status: marriageStatus, type: existingSpouses.length + 1 }] };
-            }
-          }
-          return m;
-        });
-        delete finalMember._marriageStatus;
-        delete finalMember._bloodlineSpouseId;
+        const blob = await (await fetch(newImageBase64)).blob();
+        const uploadForm = new FormData();
+        uploadForm.append('file', blob, `${formData.id}.webp`);
+        const uploadRes = await fetch('/api/upload', { method: 'POST', body: uploadForm });
+        const uploadData = await uploadRes.json() as { success?: boolean; url?: string };
+        if (uploadData.success && uploadData.url) finalAvatarUrl = uploadData.url;
       }
 
-      const exists = newFullList.find(m => m.id === finalMember.id);
-      if (exists) newFullList = newFullList.map(m => m.id === finalMember.id ? finalMember : m);
-      else newFullList.push(finalMember);
+      const url = formMode === 'add' ? '/api/members' : `/api/members/${formData.id}`;
+      const res = await fetch(url, {
+        method: formMode === 'add' ? 'POST' : 'PUT',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ ...formData, avatar_url: finalAvatarUrl })
+      });
 
-      const currentFile = await auth.service.getFile('public/data.json');
-      const logMessage = `[${exists ? "Sửa" : "Thêm"}] ${finalMember.fullName} - Bởi: ${getActionAuthor()}`;
-      await auth.service.updateFile('public/data.json', { ...currentFile?.content, members: newFullList }, currentFile?.sha, logMessage);
-
-      setGlobalMembers(newFullList);
-      setEditingMember(null);
-      setFormMode(null);
-      alert("✅ Đã lưu thành công!");
-    } catch (err: any) { alert("Lỗi: " + err.message); }
-    finally { setIsSaving(false); }
+      if (res.ok) {
+        await refreshData();
+        setEditingMember(null);
+        setFormMode(null);
+      } else {
+        const err = await res.json() as { error?: string };
+        alert(err.error || "Lỗi xử lý");
+      }
+    } catch (err) { alert("Lỗi kết nối"); } finally { setIsSaving(false); }
   };
 
   const handleDeleteMember = async (id: string) => {
-    if (!auth || isOffline) return; // Bảo vệ API
-    const hasChildren = globalMembers.some(m => m.parents?.fatherId === id || m.parents?.motherId === id);
-    if (hasChildren) { alert("⛔ KHÔNG THỂ XÓA: Thành viên này đang có con!"); return; }
-
-    setIsSaving(true);
-    setLoadingText("Đang xóa dữ liệu...");
-    try {
-      const currentFile = await auth.service.getFile('public/data.json');
-      const memberToDelete = globalMembers.find(m => m.id === id);
-      let updatedList = globalMembers.filter(m => m.id !== id).map(m => ({
-        ...m, spouses: m.spouses?.filter((s: any) => s.id !== id)
-      }));
-
-      await auth.service.updateFile('public/data.json', { ...currentFile?.content, members: updatedList }, currentFile?.sha, `[Xóa] ${memberToDelete?.fullName} - Bởi: ${getActionAuthor()}`);
-      setGlobalMembers(updatedList);
-      setEditingMember(null);
-      setFormMode(null);
-      alert("🗑️ Đã xóa thành công.");
-    } catch (err) { alert("Lỗi khi xóa!"); }
-    finally { setIsSaving(false); }
-  };
-
-  const handleAddRelative = (parent: any, type: 'child' | 'spouse') => {
-    const newMember: any = {
-      id: '', fullName: '', relationType: type === 'child' ? 'biological' : 'in_law',
-      gender: type === 'child' ? 'M' : (parent.gender === 'M' ? 'F' : 'M'),
-    };
-    if (type === 'child') {
-      const bId = parent.relationType === 'in_law' ? globalMembers.find(m => m.spouses?.some((s:any) => s.id === parent.id))?.id : parent.id;
-      newMember.parents = { fatherId: parent.gender === 'M' ? parent.id : '', motherId: parent.gender === 'F' ? parent.id : '' };
-      newMember.siblingRank = globalMembers.filter(m => m.parents?.fatherId === bId || m.parents?.motherId === bId).length + 1;
-    } else {
-      newMember.spouses = [{ id: parent.id, status: 'current' }];
-    }
-    setFormMode('add');
-    setEditingMember(newMember);
-  };
-
-  const handleManageRole = async (member: any, isAssigned: boolean) => {
-    if (!auth || auth.role !== 'super' || isOffline) return;
-    if (isAssigned) {
-      if (!window.confirm(`Xác nhận THU HỒI quyền của [${member.fullName}]?`)) return;
-      setIsSaving(true);
-      try {
-        const configFile = await auth.service.getFile('public/config.json');
-        const newConfig = JSON.parse(JSON.stringify(configFile?.content || config));
-        const currentMods = newConfig.permissions.mods;
-        const modHashKey = Object.keys(currentMods).find(key => currentMods[key].rootId === member.id);
-        
-        if (modHashKey) {
-          delete currentMods[modHashKey]; 
-          await auth.service.updateFile('public/config.json', newConfig, configFile?.sha, `[Thu hồi] Mod: ${member.fullName} - Bởi: TRƯỞNG TỘC`);
-          setConfig(newConfig); 
-          alert("✅ Đã thu hồi quyền.");
-        }
-      } catch (err) { alert("Lỗi cập nhật!"); } finally { setIsSaving(false); }
-    } else {
-      setModModal({ isOpen: true, member, step: 1, modName: "", generatedPin: "" });
-    }
-  };
-
-  const handleCreateModSubmit = async () => {
-    if (!auth || !auth.rawToken || isOffline) return;
+    if (!window.confirm("Chuyển thành viên này vào thùng rác?")) return;
     setIsSaving(true);
     try {
-      const newPin = Math.floor(100000 + Math.random() * 900000).toString();
-      const secretSalt = config.auth.salt + (import.meta.env.VITE_APP_SALT || "");
-      const encryptedTokenForMod = encryptToken(auth.rawToken, newPin, secretSalt);
-      const configFile = await auth.service.getFile('public/config.json');
-      const newConfig = JSON.parse(JSON.stringify(configFile?.content || config));
-      
-      newConfig.permissions.mods[hashPIN(newPin)] = { 
-        rootId: modModal.member.id, name: modModal.modName, token: encryptedTokenForMod 
+      const res = await fetch(`/api/members/${id}`, { method: 'DELETE' });
+      if (res.ok) {
+        await refreshData();
+        setEditingMember(null);
+        setFormMode(null);
+      } else {
+        const err = await res.json() as { error?: string };
+        alert(err.error || "Không thể xóa");
+      }
+    } catch (err) { alert("Lỗi kết nối"); } finally { setIsSaving(false); }
+  };
+
+  // 4. Quản lý Mod & Security
+  const handleSecurityAction = async (action: string, payload: any) => {
+    setIsSaving(true);
+    try {
+      const res = await fetch('/api/system/security', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ action, payload })
+      });
+      const data = await res.json() as { error?: string };
+      if (res.ok) {
+        // Chỉ refresh data để lấy family_name mới nếu cập nhật family_name thành công
+        if (action === 'UPDATE_FAMILY_NAME') await refreshData();
+        fetchSystemInfo();
+        return true; // Trả về true để biết là thành công
+      } else {
+        alert(data.error || "Lỗi xử lý");
+        return false;
+      }
+    } finally { setIsSaving(false); }
+  };
+
+  // 5. Backup & Restore
+  const handleBackup = async () => {
+    try {
+      const res = await fetch('/api/system/backup');
+      if (res.ok) {
+        const blob = await res.blob();
+        const url = window.URL.createObjectURL(blob);
+        const a = document.createElement('a');
+        a.href = url;
+        a.download = `giapha_backup_${new Date().toISOString().split('T')[0]}.json`;
+        a.click();
+      }
+    } catch (err) { alert("Lỗi tải bản sao lưu"); }
+  };
+
+  const handleRestore = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (!file || !window.confirm("CẢNH BÁO: Dữ liệu hiện tại sẽ bị xóa sạch và thay thế bằng file này. Tiếp tục?")) return;
+    
+    setIsSaving(true);
+    try {
+      const reader = new FileReader();
+      reader.onload = async (event) => {
+        const content = JSON.parse(event.target?.result as string);
+        const res = await fetch('/api/system/restore', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify(content)
+        });
+        if (res.ok) {
+          alert("Khôi phục hoàn tất!");
+          window.location.reload();
+        } else alert("Lỗi khôi phục dữ liệu");
       };
-      
-      await auth.service.updateFile('public/config.json', newConfig, configFile?.sha, `[Cấp quyền] Mod: ${modModal.modName} - Bởi: TRƯỞNG TỘC`);
-      setConfig(newConfig); 
-      setModModal({ ...modModal, step: 2, generatedPin: newPin });
-    } catch (err) { alert("Lỗi cấp quyền!"); } finally { setIsSaving(false); }
+      reader.readAsText(file);
+    } finally { setIsSaving(false); }
   };
 
-  const handleCloudBackup = async () => {
-    if (!auth || auth.role !== 'super' || isOffline) return;
-    setIsSaving(true);
-    try {
-      const path = `public/backups/data_${new Date().toISOString().replace(/[:.]/g, '-')}.json`;
-      await auth.service.updateFile(path, { members: globalMembers }, undefined, `[Backup] Bởi: TRƯỞNG TỘC`);
-      alert(`✅ Đã sao lưu Cloud!`);
-    } catch (err) { alert("Lỗi sao lưu!"); } finally { setIsSaving(false); }
-  };
-
-  const handleExportJSON = () => {
-    const dataUri = 'data:application/json;charset=utf-8,'+ encodeURIComponent(JSON.stringify({ members: globalMembers }, null, 2));
-    const link = document.createElement('a');
-    link.setAttribute('href', dataUri);
-    link.setAttribute('download', `giapha_${new Date().toISOString().split('T')[0]}.json`);
-    link.click();
-  };
-
-  const handleSaveFamilySettings = async (about: string, name: string, photos: any[]) => {
-    if (!auth || isOffline) return;
-    setIsSaving(true);
-    try {
-      const currentFile = await auth.service.getFile('public/data.json');
-      const updatedData = { ...currentFile?.content, metadata: { ...currentFile?.content?.metadata, aboutFamily: about, familyName: name, familyPhotos: photos.filter(p => p.url.trim() !== "") } };
-      await auth.service.updateFile('public/data.json', updatedData, currentFile?.sha, `[Cài đặt] Cập nhật Tộc phả - Bởi: TRƯỞNG TỘC`);
-      setGlobalMembers(updatedData.members); 
-      setIsFamilyModalOpen(false);
-      alert("✅ Đã cập nhật!");
-      window.location.reload(); 
-    } catch (err) { alert("Lỗi cập nhật!"); } finally { setIsSaving(false); }
-  };
-
-  const handleImportJSON = async (e: React.ChangeEvent<HTMLInputElement>) => {
-    if (!auth || auth.role !== 'super' || !e.target.files?.[0] || isOffline) return;
-    if (!window.confirm("⚠️ CẢNH BÁO: Hành động này sẽ GHI ĐÈ toàn bộ dữ liệu. Tiếp tục?")) return;
+  // 6. Photo Upload Logic
+  const handleSelectNewPhoto = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+    
+    // Tạm thời cho upload ảnh gốc (Giới hạn ở Backend là 10MB)
+    setNewPhotoFile(file);
     const reader = new FileReader();
-    reader.onload = async (event) => {
-      try {
-        const data = JSON.parse(event.target?.result as string);
-        setIsSaving(true);
-        const currentFile = await auth.service.getFile('public/data.json');
-        await auth.service.updateFile('public/data.json', data, currentFile?.sha, `[Khôi phục] Dữ liệu từ File - Bởi: TRƯỞNG TỘC`);
-        setGlobalMembers(data.members); alert("✅ Khôi phục thành công!");
-      } catch (err) { alert("Lỗi tệp!"); } finally { setIsSaving(false); }
-    };
-    reader.readAsText(e.target.files[0]);
+    reader.onload = (event) => setNewPhotoPreview(event.target?.result as string);
+    reader.readAsDataURL(file);
   };
 
-  if (!auth) {
+  const handleUploadPhoto = async () => {
+    if (!newPhotoFile) return alert("Vui lòng chọn ảnh!");
+    setIsSaving(true);
+    try {
+      // 1. Upload file lên R2 lấy URL
+      const uploadForm = new FormData();
+      uploadForm.append('file', newPhotoFile, newPhotoFile.name);
+      
+      const uploadRes = await fetch('/api/upload', { method: 'POST', body: uploadForm });
+      const uploadData = await uploadRes.json() as { success?: boolean; url?: string; error?: string };
+      
+      if (!uploadData.success || !uploadData.url) {
+        alert(uploadData.error || "Tải ảnh thất bại.");
+        return;
+      }
+
+      // 2. Thêm vào danh sách và cập nhật DB (UPDATE_FAMILY_PHOTOS)
+      const updatedPhotos = [...aboutData.photos, { url: uploadData.url, caption: newPhotoCaption }];
+      
+      const res = await fetch('/api/system/security', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ action: 'UPDATE_FAMILY_PHOTOS', payload: { photos: updatedPhotos } })
+      });
+      
+      if (res.ok) {
+        setAboutData(prev => ({ ...prev, photos: updatedPhotos }));
+        setShowPhotoForm(false);
+        setNewPhotoFile(null);
+        setNewPhotoPreview(null);
+        setNewPhotoCaption('');
+        fetchSystemInfo();
+      } else {
+        alert("Lỗi cập nhật danh sách ảnh!");
+      }
+    } catch (err) {
+      alert("Lỗi kết nối");
+    } finally {
+      setIsSaving(false);
+    }
+  };
+
+
+  if (!auth || auth.role === 'guest') {
     return (
       <div className="h-full flex flex-col items-center justify-center p-6 bg-stone-50">
-        <div className="w-full max-w-sm space-y-6 text-center animate-in fade-in">
-          <div className="inline-flex p-5 bg-[#704214]/10 rounded-full text-[#704214]"><Lock size={32} /></div>
-          <h2 className="text-2xl font-black text-stone-800 uppercase tracking-tight">Xác thực Quản trị</h2>
-          <input type="password" maxLength={6} className="w-full p-5 text-4xl text-center font-mono tracking-[0.5em] border-2 border-stone-200 rounded-3xl focus:border-[#704214] outline-none" placeholder="••••••" value={pin} onChange={(e) => setPin(e.target.value)} onKeyDown={(e) => e.key === 'Enter' && handleLogin()} />
-          {error && <div className="text-red-600 text-xs font-bold bg-red-50 p-3 rounded-xl">{error}</div>}
-          <div className="flex gap-3">
-            <button onClick={onBack} className="flex-1 py-4 bg-stone-200 text-stone-600 rounded-2xl font-bold uppercase text-xs">Quay lại</button>
-            <button onClick={handleLogin} className="flex-[2] py-4 bg-[#704214] text-white rounded-2xl font-black shadow-lg uppercase text-xs tracking-widest">Đăng nhập</button>
+        <div className="w-full max-w-sm space-y-8 text-center animate-in fade-in zoom-in-95">
+          <div className="inline-flex p-6 bg-[#704214]/10 rounded-3xl text-[#704214] border-2 border-[#704214]/20 shadow-inner"><Lock size={40} /></div>
+          <div className="space-y-2">
+            <h2 className="text-3xl font-black text-stone-800 uppercase tracking-tighter">Quản trị viên</h2>
+            <p className="text-[10px] text-stone-400 font-bold uppercase tracking-widest">Xác thực mã PIN để tiếp tục</p>
+          </div>
+          <input 
+            type="password" maxLength={6} placeholder="••••••"
+            className="w-full p-6 text-5xl text-center font-mono tracking-[0.5em] border-2 border-stone-200 rounded-[2rem] focus:border-[#704214] focus:ring-4 ring-[#704214]/10 outline-none transition-all"
+            value={pin} onChange={(e) => setPin(e.target.value)}
+            onKeyDown={(e) => e.key === 'Enter' && handleLogin()}
+          />
+          {error && <div className="text-red-600 text-xs font-black bg-red-50 p-4 rounded-2xl border border-red-100">{error}</div>}
+          <div className="flex gap-4">
+            <button onClick={onBack} className="flex-1 py-5 bg-stone-200 text-stone-600 rounded-2xl font-black uppercase text-xs hover:bg-stone-300 transition-colors">Hủy bỏ</button>
+            <button onClick={handleLogin} className="flex-[2] py-5 bg-[#704214] text-white rounded-2xl font-black shadow-xl shadow-[#704214]/30 uppercase text-xs tracking-widest hover:scale-105 active:scale-95 transition-all">Đăng nhập</button>
           </div>
         </div>
       </div>
@@ -329,163 +273,444 @@ export const Admin: React.FC<AdminProps> = ({ onBack, globalMembers, setGlobalMe
   }
 
   return (
-    <div className="h-full flex flex-col bg-[#f8f7f5] overflow-hidden text-stone-800">
-      <div className="p-4 border-b flex justify-between items-center bg-white shadow-sm z-20 overflow-x-auto custom-scrollbar">
-        <div className="flex items-center gap-3 shrink-0 mr-4">
-          <div className={`p-2 rounded-full ${isOffline ? 'bg-amber-100 text-amber-600' : 'text-green-600 bg-green-100'}`}>
-            {isOffline ? <WifiOff size={18} /> : <CheckCircle2 size={18} />}
-          </div>
-          <div>
-            <p className={`text-[9px] font-black uppercase leading-none ${isOffline ? 'text-amber-500' : 'text-stone-400'}`}>
-              {isOffline ? 'Offline Mode' : 'Cloud Connected'}
-            </p>
-            <p className="text-sm font-bold text-[#704214]">{auth.role === 'super' ? '🚩 TRƯỞNG TỘC' : `🌿 QUẢN TRỊ NHÁNH: ${auth.user.name}`}</p>
-          </div>
-        </div>
-
-        {/* Khối quản lý sẽ bị mờ và không thể click nếu mất mạng */}
-        <div className={`flex gap-2 border-x px-4 border-stone-200 shrink-0 transition-opacity duration-300 ${isOffline ? 'opacity-40 pointer-events-none' : ''}`}>
-          <button onClick={handleOpenLogs} className="px-3 py-2 bg-stone-100 text-stone-700 rounded-lg font-bold text-[10px] uppercase hover:bg-stone-200 transition-colors flex items-center gap-1">
-            <History size={14} /> Lịch sử
-          </button>
-          {auth.role === 'super' && (
+    <div className="h-full flex flex-col bg-[#f8f7f5] overflow-hidden">
+      {/* NAVBAR QUẢN TRỊ */}
+      <div className="px-6 py-4 border-b flex flex-wrap justify-between items-center bg-white shadow-sm z-30 gap-4">
+        <div className="flex items-center gap-2 overflow-x-auto no-scrollbar pb-1 sm:pb-0">
+          <button onClick={() => setActiveTab('tree')} className={`px-5 py-2.5 rounded-xl text-[10px] font-black uppercase flex items-center gap-2 transition-all whitespace-nowrap ${activeTab === 'tree' ? 'bg-[#704214] text-white shadow-lg' : 'bg-stone-100 text-stone-500 hover:bg-stone-200'}`}><Database size={14} /> Cây Gia Phả</button>
+          
+          {auth.role === 'sm' && (
             <>
-              <button onClick={handleCloudBackup} className="px-3 py-2 bg-blue-50 text-blue-600 rounded-lg font-bold text-[10px] uppercase hover:bg-blue-100 transition-colors hidden md:block">☁️ Backup Cloud</button>
-              <button onClick={async () => {
-                  setIsSaving(true);
-                  try {
-                    const file = await auth.service.getFile('data.json');
-                    const meta = file?.content?.metadata || {};
-                    setTempName(meta.familyName || "GIA PHẢ");
-                    setTempAbout(meta.aboutFamily || "");
-                    setTempPhotos(meta.familyPhotos || []);
-                    setIsFamilyModalOpen(true);
-                  } finally { setIsSaving(false); }
-                }} className="px-3 py-2 bg-purple-50 text-purple-600 rounded-lg font-bold text-[10px] uppercase hover:bg-purple-100 transition-colors">⚙️ Thông tin chung</button>
-              <button onClick={handleExportJSON} className="px-3 py-2 bg-amber-50 text-amber-600 rounded-lg font-bold text-[10px] uppercase hover:bg-amber-100 transition-colors hidden sm:block">📥 Lưu DB về máy</button>
-              <label className="px-3 py-2 bg-red-50 text-red-600 rounded-lg font-bold text-[10px] uppercase hover:bg-red-100 transition-colors cursor-pointer hidden sm:block">
-                📤 Khôi Phục <input type="file" accept=".json" className="hidden" onChange={handleImportJSON} />
-              </label>
+              <button onClick={() => setActiveTab('security')} className={`px-5 py-2.5 rounded-xl text-[10px] font-black uppercase flex items-center gap-2 transition-all whitespace-nowrap ${activeTab === 'security' ? 'bg-blue-700 text-white shadow-lg' : 'bg-stone-100 text-stone-500 hover:bg-stone-200'}`}><ShieldCheck size={14} /> Mod & Bảo mật</button>
+              <button onClick={() => setActiveTab('about')} className={`px-5 py-2.5 rounded-xl text-[10px] font-black uppercase flex items-center gap-2 transition-all whitespace-nowrap ${activeTab === 'about' ? 'bg-pink-700 text-white shadow-lg' : 'bg-stone-100 text-stone-500 hover:bg-stone-200'}`}><ImageIcon size={14} /> Trang Giới thiệu</button>
+              <button onClick={() => setActiveTab('system')} className={`px-5 py-2.5 rounded-xl text-[10px] font-black uppercase flex items-center gap-2 transition-all whitespace-nowrap ${activeTab === 'system' ? 'bg-stone-800 text-white shadow-lg' : 'bg-stone-100 text-stone-500 hover:bg-stone-200'}`}><LayoutDashboard size={14} /> Hệ thống</button>
             </>
           )}
-        </div>
 
-        <button onClick={() => setAuth(null)} className="flex items-center gap-2 ml-4 px-4 py-2 bg-red-50 text-red-600 rounded-xl font-bold text-xs uppercase tracking-tighter transition-colors hover:bg-red-100 shrink-0">
-           <LogOut size={16} /> Thoát
-        </button>
+          {auth.role === 'mod' && (
+            <button onClick={() => setActiveTab('security')} className={`px-5 py-2.5 rounded-xl text-[10px] font-black uppercase flex items-center gap-2 transition-all whitespace-nowrap ${activeTab === 'security' ? 'bg-blue-700 text-white shadow-lg' : 'bg-stone-100 text-stone-500 hover:bg-stone-200'}`}><Key size={14} /> Đổi mã PIN</button>
+          )}
+        </div>
+        
+        <div className="flex items-center gap-4 ml-auto">
+            <div className="text-right hidden sm:block">
+                <p className="text-[10px] font-black text-stone-400 uppercase leading-none">Xin chào,</p>
+                <p className="text-xs font-black text-stone-800 uppercase tracking-tighter">
+                  {auth?.mod_name || (auth?.role === 'sm' ? 'Trưởng Tộc' : 'Mod Nhánh')}
+                </p>
+            </div>
+            <button onClick={() => { if(window.confirm("Xác nhận đăng xuất?")) setAuth(null); }} className="p-2.5 bg-red-50 text-red-600 rounded-xl hover:bg-red-100 transition-colors" title="Đăng xuất"><LogOut size={20} /></button>
+        </div>
       </div>
 
-      <div className="flex-1 relative w-full h-full overflow-hidden">
-         <TreeViewAdmin 
-            members={globalMembers} config={config} currentUserRole={auth.role}
-            allowedRootId={auth.role === 'super' ? null : auth.user.rootId}
-            onEdit={(m: any) => { 
-              if (isOffline) { alert("Vui lòng kết nối mạng để chỉnh sửa!"); return; } // Chặn mở Form khi offline
-              setFormMode('edit'); setEditingMember(m); 
+      <div className="flex-1 relative overflow-hidden">
+        {/* TAB 1: CÂY GIA PHẢ ADMIN */}
+        {activeTab === 'tree' && (
+          <TreeViewAdmin 
+            members={globalMembers} currentUserRole={auth.role} allowedRootId={auth.rootId || null}
+            onEdit={(m) => { setFormMode('edit'); setEditingMember(m); }}
+            onAddRelative={(parent, type) => {
+              const newM: any = { id: '', relation_status: type === 'child' ? 'biological' : 'in_law', gender: type === 'spouse' ? (parent.gender === 'M' ? 'F' : 'M') : 'M' };
+              if (type === 'child') parent.gender === 'M' ? newM.father_id = parent.id : newM.mother_id = parent.id;
+              else newM._bloodlineSpouseId = parent.id;
+              setFormMode('add'); setEditingMember(newM);
             }}
-            onAddRelative={(p: any, t: any) => { 
-              if (isOffline) { alert("Vui lòng kết nối mạng để thêm thành viên!"); return; } // Chặn mở Form khi offline
-              handleAddRelative(p, t); 
-            }}
-            onManageRole={(m: any, a: boolean) => { 
-              if (isOffline) { alert("Vui lòng kết nối mạng để thao tác!"); return; } // Chặn mở Form khi offline
-              handleManageRole(m, a); 
-            }}
-         />
-         {auth.role === 'mod' && (
-           <div className="absolute top-4 right-4 bg-amber-100 border border-amber-200 p-3 rounded-2xl flex items-center gap-2 shadow-sm pointer-events-none z-10 text-[10px] font-bold text-amber-800 uppercase">
-              <ShieldAlert size={16} /> Nhánh: {auth.user.rootId}
-           </div>
-         )}
+            onManageRole={(m) => { setActiveTab('security'); setSecurityData(prev => ({ ...prev, newMod: { ...prev.newMod, rootId: m.id, name: m.full_name } })); }} 
+          />
+        )}
+
+        {/* TAB 2: MOD & BẢO MẬT (CHUNG CHO SM VÀ MOD) */}
+        {activeTab === 'security' && (
+          <div className="h-full overflow-y-auto p-6 space-y-10 custom-scrollbar max-w-5xl mx-auto">
+            
+            {auth.role === 'sm' ? (
+              <>
+                {/* GIAO DIỆN BẢO MẬT DÀNH CHO SM */}
+                <section className="space-y-4">
+                  <h3 className="text-xs font-black text-stone-400 uppercase tracking-widest flex items-center gap-2"><ShieldCheck size={16}/> Quản lý Mod Nhánh</h3>
+                  <div className="bg-white rounded-3xl border shadow-sm overflow-hidden">
+                    <table className="w-full text-left border-collapse">
+                      <thead className="bg-stone-50 border-b">
+                        <tr>
+                          <th className="p-4 text-[9px] font-black text-stone-400 uppercase">Tên Mod / Nhánh</th>
+                          <th className="p-4 text-[9px] font-black text-stone-400 uppercase text-center">Mã PIN</th>
+                          <th className="p-4 text-[9px] font-black text-stone-400 uppercase text-right">Thao tác</th>
+                        </tr>
+                      </thead>
+                      <tbody className="divide-y">
+                        {systemData?.mods?.map((m: any) => (
+                          <tr key={m.id} className="hover:bg-stone-50/50 transition-colors">
+                            <td className="p-4">
+                              <p className="font-black text-stone-800 text-sm">{m.mod_name}</p>
+                              <p className="text-[10px] text-stone-400 uppercase">Gốc nhánh: {m.branch_root_id}</p>
+                            </td>
+                            <td className="p-4 text-center font-mono text-xs text-stone-400">••••••</td>
+                            <td className="p-4 text-right flex justify-end gap-2">
+                               <button onClick={() => { const p = prompt("Nhập mã PIN 6 số mới cho Mod:"); if(p) handleSecurityAction('CHANGE_MOD_PIN', { id: m.id, pin: p }); }} className="p-2 bg-blue-50 text-blue-600 rounded-lg hover:bg-blue-100"><Key size={14}/></button>
+                               <button onClick={() => { if(window.confirm(`Thu hồi quyền Mod của ${m.mod_name}?`)) handleSecurityAction('REVOKE_MOD', { id: m.id }); }} className="p-2 bg-red-50 text-red-600 rounded-lg hover:bg-red-100"><Trash2 size={14}/></button>
+                            </td>
+                          </tr>
+                        ))}
+                        {/* HÀNG THÊM MOD MỚI NHANH */}
+                        <tr className="bg-blue-50/30">
+                            <td className="p-4">
+                                <input type="text" placeholder="Tên Mod..." className="w-full bg-white p-2 rounded-lg text-xs border border-blue-100 outline-none" value={securityData.newMod.name} onChange={e => setSecurityData({...securityData, newMod: {...securityData.newMod, name: e.target.value}})} />
+                            </td>
+                            <td className="p-4">
+                                <input type="password" maxLength={6} placeholder="6 số..." className="w-24 mx-auto block bg-white p-2 rounded-lg text-xs border border-blue-100 text-center font-mono outline-none" value={securityData.newMod.pin} onChange={e => setSecurityData({...securityData, newMod: {...securityData.newMod, pin: e.target.value}})} />
+                            </td>
+                            <td className="p-4 text-right">
+                                <button onClick={() => { if(!securityData.newMod.name || securityData.newMod.pin.length < 6) return alert("Vui lòng nhập đủ tên và 6 số PIN"); handleSecurityAction('ADD_MOD', securityData.newMod); }} className="px-4 py-2 bg-blue-600 text-white rounded-lg text-[10px] font-black uppercase shadow-lg">Cấp quyền</button>
+                            </td>
+                        </tr>
+                      </tbody>
+                    </table>
+                  </div>
+                </section>
+
+                <section className="grid grid-cols-1 md:grid-cols-2 gap-6">
+                    {/* Khu vực quản lý View PIN */}
+                    {(() => {
+                        const isGuestPinActive = !!systemData?.settings?.find((s: any) => s.key === 'view_pin_hash')?.value;
+                        return (
+                            <div className="bg-white p-6 rounded-3xl border shadow-sm space-y-4">
+                                <div className="flex justify-between items-center">
+                                    <h3 className="text-xs font-black text-stone-400 uppercase flex items-center gap-2">
+                                        {isGuestPinActive ? <Lock size={16} className="text-red-500" /> : <Unlock size={16} className="text-green-500" />}
+                                        View PIN (Khách)
+                                    </h3>
+                                    {isGuestPinActive ? (
+                                        <span className="text-[9px] font-black bg-red-50 text-red-600 px-2 py-1 rounded uppercase tracking-widest">Đang khóa</span>
+                                    ) : (
+                                        <span className="text-[9px] font-black bg-green-50 text-green-600 px-2 py-1 rounded uppercase tracking-widest">Mở tự do</span>
+                                    )}
+                                </div>
+                                
+                                <input 
+                                    type="password" maxLength={4} 
+                                    className="w-full p-4 bg-stone-50 border border-stone-100 rounded-2xl text-2xl text-center tracking-[1em] font-mono outline-none focus:border-stone-400 transition-colors" 
+                                    placeholder={isGuestPinActive ? "••••" : "••••"} 
+                                    value={securityData.guestPin} 
+                                    onChange={e => setSecurityData({...securityData, guestPin: e.target.value})} 
+                                />
+                                
+                                <div className="flex gap-2">
+                                    <button onClick={() => {
+                                        if (!securityData.guestPin || securityData.guestPin.length < 4) return alert("Vui lòng nhập đủ 4 số để cập nhật!");
+                                        handleSecurityAction('UPDATE_GUEST_PIN', { pin: securityData.guestPin });
+                                        setSecurityData({...securityData, guestPin: ''});
+                                    }} className="flex-1 py-3 bg-stone-800 text-white rounded-xl font-black uppercase text-[10px] hover:bg-stone-900 transition-colors">Lưu mã mới</button>
+                                    
+                                    {isGuestPinActive && (
+                                        <button onClick={() => {
+                                            if(window.confirm("Bạn muốn tắt mã bảo vệ và mở cửa tự do cho khách?")) {
+                                                handleSecurityAction('UPDATE_GUEST_PIN', { pin: '' });
+                                            }
+                                        }} className="py-3 px-4 bg-red-50 text-red-600 rounded-xl font-black uppercase text-[10px] hover:bg-red-100 transition-colors">Gỡ khóa</button>
+                                    )}
+                                </div>
+                                <p className="text-[9px] text-stone-400 italic text-center leading-relaxed">
+                                    * Mã PIN được mã hóa bảo mật 1 chiều (SHA-256) nên không thể xem lại mã cũ. Hãy nhập mã mới để ghi đè hoặc chọn Gỡ khóa.
+                                </p>
+                            </div>
+                        );
+                    })()}
+                    <div className="bg-white p-6 rounded-3xl border shadow-sm space-y-4">
+                        <h3 className="text-xs font-black text-stone-400 uppercase flex items-center gap-2"><Key size={16}/> SM PIN (Mã Trưởng tộc 6 số)</h3>
+                        <input type="password" maxLength={6} className="w-full p-4 bg-stone-50 border border-stone-100 rounded-2xl text-2xl text-center tracking-[1em] font-mono outline-none" placeholder="••••••" value={securityData.smPin} onChange={e => setSecurityData({...securityData, smPin: e.target.value})} />
+                        <button onClick={() => handleSecurityAction('UPDATE_SM_PIN', { pin: securityData.smPin })} className="w-full py-4 bg-[#704214] text-white rounded-2xl font-black uppercase text-xs">Thay đổi mã cá nhân</button>
+                    </div>
+                </section>
+              </>
+            ) : (
+              /* GIAO DIỆN DÀNH RIÊNG CHO MOD: TỰ ĐỔI MÃ PIN */
+              <section className="bg-white p-8 rounded-[2.5rem] border shadow-sm space-y-6 max-w-md mx-auto mt-10">
+                <div className="text-center space-y-2">
+                  <div className="inline-flex p-4 bg-blue-50 text-blue-600 rounded-2xl mb-2"><Key size={32}/></div>
+                  <h3 className="text-lg font-black text-stone-800 uppercase tracking-tighter">Đổi mã PIN cá nhân</h3>
+                  <p className="text-[10px] text-stone-400 font-bold uppercase tracking-widest">Dành cho Mod Nhánh: {auth.mod_name}</p>
+                </div>
+                <input 
+                  type="password" maxLength={6} placeholder="Nhập 6 số mới..."
+                  className="w-full p-4 bg-stone-50 border border-stone-100 rounded-2xl text-2xl text-center tracking-[1em] font-mono outline-none focus:border-blue-500 transition-colors"
+                  value={securityData.smPin} onChange={e => setSecurityData({...securityData, smPin: e.target.value})}
+                />
+                <button 
+                  onClick={() => {
+                    if(securityData.smPin.length < 6) return alert("Vui lòng nhập đủ 6 số");
+                    handleSecurityAction('CHANGE_MY_PIN', { pin: securityData.smPin });
+                    setSecurityData({...securityData, smPin: ''});
+                  }}
+                  className="w-full py-4 bg-blue-600 text-white rounded-2xl font-black uppercase text-xs shadow-lg hover:bg-blue-700 transition-colors"
+                >Xác nhận đổi mã PIN</button>
+              </section>
+            )}
+          </div>
+        )}
+
+        {/* TAB 3: QUẢN TRỊ TRANG ABOUT (CHỈ SM) */}
+        {activeTab === 'about' && auth.role === 'sm' && (
+          <div className="h-full overflow-y-auto p-6 space-y-8 custom-scrollbar max-w-5xl mx-auto pb-32">
+             <div className="flex justify-between items-center border-b-2 border-pink-100 pb-4">
+                <h3 className="text-lg font-black text-pink-900 uppercase tracking-tighter">Nội dung Giới thiệu dòng tộc</h3>
+             </div>
+             
+             {/* 1. TÊN HIỂN THỊ */}
+             <div className="bg-white p-6 rounded-[2rem] border shadow-sm space-y-3">
+                <div className="flex justify-between items-center">
+                    <label className="text-[10px] font-black text-stone-400 uppercase tracking-widest">Tên hiển thị Gia Phả</label>
+                    <span className={`text-[10px] font-black ${aboutData.family_name.length >= 100 ? 'text-red-500' : 'text-stone-400'}`}>({aboutData.family_name.length}/100)</span>
+                </div>
+                <div className="flex gap-3">
+                    <input 
+                        type="text" maxLength={100} 
+                        className="flex-1 p-4 bg-stone-50 border border-stone-200 rounded-2xl outline-none focus:ring-4 ring-pink-50 text-sm font-bold text-stone-800 uppercase transition-all" 
+                        placeholder="VD: GIA PHẢ HỌ NGUYỄN" 
+                        value={aboutData.family_name} 
+                        onChange={e => setAboutData({...aboutData, family_name: e.target.value})} 
+                    />
+                    <button 
+                        onClick={() => handleSecurityAction('UPDATE_FAMILY_NAME', { name: aboutData.family_name })} 
+                        className="px-6 bg-pink-700 text-white rounded-2xl font-black uppercase text-[10px] hover:bg-pink-800 transition-colors shadow-lg"
+                    >Lưu Tên</button>
+                </div>
+             </div>
+
+             {/* 2. TIỂU SỬ DÒNG TỘC */}
+             <div className="bg-white p-6 rounded-[2rem] border shadow-sm space-y-3">
+                <div className="flex justify-between items-center">
+                    <label className="text-[10px] font-black text-stone-400 uppercase tracking-widest">Tiểu sử dòng tộc (Hiển thị đầu trang About)</label>
+                    <span className={`text-[10px] font-black ${aboutData.intro.length >= 3000 ? 'text-red-500 animate-pulse' : 'text-stone-400'}`}>({aboutData.intro.length}/3000)</span>
+                </div>
+                <textarea 
+                    rows={8} maxLength={3000}
+                    className="w-full p-6 bg-stone-50 border border-stone-200 rounded-3xl outline-none focus:ring-4 ring-pink-50 text-sm leading-relaxed transition-all resize-y" 
+                    placeholder="Viết vài dòng giới thiệu về lịch sử, truyền thống dòng họ..." 
+                    value={aboutData.intro} 
+                    onChange={e => setAboutData({...aboutData, intro: e.target.value})}
+                ></textarea>
+                <div className="flex justify-end">
+                    <button 
+                        onClick={() => handleSecurityAction('UPDATE_ABOUT_INTRO', { intro: aboutData.intro })} 
+                        className="px-8 py-3 bg-pink-700 text-white rounded-2xl font-black uppercase text-[10px] hover:bg-pink-800 transition-colors shadow-lg flex items-center gap-2"
+                    ><Save size={14}/> Lưu Tiểu Sử</button>
+                </div>
+             </div>
+
+             {/* 3. ALBUM ẢNH DÒNG TỘC */}
+             <div className="bg-white p-6 rounded-[2rem] border shadow-sm space-y-6 relative">
+                <div className="flex justify-between items-center">
+                    <label className="text-[10px] font-black text-stone-400 uppercase tracking-widest">Album ảnh dòng tộc ({aboutData.photos.length}/12 ảnh)</label>
+                    <div className="flex items-center gap-2">
+                        {aboutData.photos.length > 0 && (
+                            <button onClick={() => handleSecurityAction('UPDATE_FAMILY_PHOTOS', { photos: aboutData.photos })} className="text-[10px] font-black text-white bg-stone-800 px-4 py-2 rounded-xl hover:bg-stone-900 transition-colors uppercase flex items-center gap-1 shadow-md">
+                                <Save size={12}/> Lưu Ghi Chú Ảnh
+                            </button>
+                        )}
+                        {aboutData.photos.length < 12 && !showPhotoForm && (
+                            <button onClick={() => setShowPhotoForm(true)} className="text-[10px] font-black text-pink-700 bg-pink-50 px-4 py-2 rounded-xl border border-pink-100 uppercase hover:bg-pink-100 transition-colors flex items-center gap-1">
+                                <Plus size={14}/> Ảnh Mới
+                            </button>
+                        )}
+                    </div>
+                </div>
+
+                {/* FORM TẢI ẢNH MỚI TƯỜNG MINH */}
+                {showPhotoForm && (
+                    <div className="p-4 bg-pink-50/50 rounded-2xl border-2 border-dashed border-pink-200 animate-in fade-in zoom-in-95">
+                        <div className="flex justify-between items-center mb-4">
+                            <h4 className="text-[10px] font-black text-pink-800 uppercase">Thêm ảnh vào Album</h4>
+                            <button onClick={() => { setShowPhotoForm(false); setNewPhotoPreview(null); setNewPhotoFile(null); setNewPhotoCaption(''); }} className="text-stone-400 hover:text-red-500"><X size={16}/></button>
+                        </div>
+                        <div className="flex flex-col sm:flex-row gap-4 items-start">
+                            {/* Khu vực chọn ảnh */}
+                            <div className="w-full sm:w-40 aspect-square shrink-0 rounded-xl border-2 border-stone-200 border-dashed bg-white flex flex-col items-center justify-center overflow-hidden relative cursor-pointer hover:border-pink-300 transition-colors group" onClick={() => fileInputRef.current?.click()}>
+                                {newPhotoPreview ? (
+                                    <>
+                                        <img src={newPhotoPreview} className="w-full h-full object-cover absolute inset-0 z-10" />
+                                        <div className="absolute inset-0 bg-black/50 z-20 opacity-0 group-hover:opacity-100 transition-opacity flex items-center justify-center text-[10px] font-black text-white uppercase"><UploadCloud size={20}/></div>
+                                    </>
+                                ) : (
+                                    <div className="text-center p-4">
+                                        <UploadCloud size={24} className="text-stone-300 mx-auto mb-2" />
+                                        <span className="text-[10px] font-black text-stone-400 uppercase">Chọn ảnh (Max 10MB)</span>
+                                    </div>
+                                )}
+                                <input type="file" accept="image/jpeg, image/png, image/webp" className="hidden" ref={fileInputRef} onChange={handleSelectNewPhoto} />
+                            </div>
+
+                            {/* Khu vực nhập Caption và Upload */}
+                            <div className="flex-1 w-full space-y-3">
+                                <div>
+                                    <div className="flex justify-between items-center mb-1">
+                                        <label className="text-[10px] font-black text-stone-500 uppercase">Ghi chú ảnh (Không bắt buộc)</label>
+                                        <span className={`text-[9px] font-black ${newPhotoCaption.length >= 150 ? 'text-red-500' : 'text-stone-400'}`}>({newPhotoCaption.length}/150)</span>
+                                    </div>
+                                    <textarea 
+                                        rows={3} maxLength={150}
+                                        placeholder="Ví dụ: Lễ thanh minh năm 2025 tại nhà thờ Tổ..."
+                                        className="w-full p-3 bg-white border border-stone-200 rounded-xl outline-none focus:border-pink-300 text-xs"
+                                        value={newPhotoCaption}
+                                        onChange={(e) => setNewPhotoCaption(e.target.value)}
+                                    ></textarea>
+                                </div>
+                                <div className="flex justify-end">
+                                    <button 
+                                        onClick={handleUploadPhoto} 
+                                        disabled={!newPhotoFile}
+                                        className="px-6 py-2.5 bg-pink-700 text-white rounded-xl font-black uppercase text-[10px] shadow-lg hover:bg-pink-800 transition-colors disabled:opacity-50 disabled:cursor-not-allowed flex items-center gap-2"
+                                    ><Upload size={14}/> Xác nhận thêm ảnh</button>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                )}
+
+                {/* DANH SÁCH ẢNH HIỆN TẠI */}
+                {aboutData.photos.length > 0 ? (
+                    <div className="grid grid-cols-2 sm:grid-cols-4 md:grid-cols-5 gap-4">
+                        {aboutData.photos.map((photo, idx) => (
+                            <div key={idx} className="relative aspect-square bg-stone-100 rounded-2xl border border-stone-200 overflow-hidden group shadow-sm">
+                                <img src={photo.url} className="w-full h-full object-cover transition-transform group-hover:scale-105 duration-500" onError={(e) => e.currentTarget.style.display='none'} />
+                                
+                                {/* Lớp phủ mờ hiển thị nút Xóa góc trên cùng */}
+                                <div className="absolute top-0 right-0 p-1 opacity-0 group-hover:opacity-100 transition-opacity z-20">
+                                     <button 
+                                        onClick={() => {
+                                            if(window.confirm("Xóa bức ảnh này khỏi hệ thống (Không thể hoàn tác)?")) {
+                                                handleSecurityAction('DELETE_FAMILY_PHOTO', { url: photo.url });
+                                            }
+                                        }} 
+                                        className="p-1.5 bg-white/90 text-red-600 hover:bg-red-500 hover:text-white rounded-lg shadow-md transition-colors"
+                                        title="Xóa ảnh"
+                                     ><Trash2 size={14}/></button>
+                                </div>
+
+                                {/* Lớp phủ Caption bên dưới */}
+                                <div className="absolute inset-x-0 bottom-0 bg-gradient-to-t from-black/80 via-black/40 to-transparent p-2 pt-6">
+                                    <input 
+                                        type="text" maxLength={150} 
+                                        placeholder="Ghi chú (Tùy chọn)..." 
+                                        className="w-full p-1.5 rounded-lg text-[9px] bg-white/20 text-white placeholder-white/50 border border-white/20 outline-none focus:bg-white/90 focus:text-stone-800 transition-colors font-medium text-center" 
+                                        value={photo.caption} 
+                                        onChange={e => { const newP = [...aboutData.photos]; newP[idx].caption = e.target.value; setAboutData({...aboutData, photos: newP}); }} 
+                                    />
+                                </div>
+                            </div>
+                        ))}
+                    </div>
+                ) : (
+                    !showPhotoForm && (
+                        <div className="py-12 border-2 border-dashed border-stone-200 rounded-2xl flex flex-col items-center justify-center text-stone-400 space-y-2 bg-stone-50/50">
+                            <ImageIcon size={32} className="opacity-50" />
+                            <p className="text-[10px] font-black uppercase tracking-widest">Album chưa có ảnh nào</p>
+                        </div>
+                    )
+                )}
+             </div>
+          </div>
+        )}
+
+        {/* TAB 4: HỆ THỐNG & THÙNG RÁC (CHỈ SM) */}
+        {activeTab === 'system' && auth.role === 'sm' && (
+          <div className="h-full overflow-y-auto p-6 space-y-10 custom-scrollbar max-w-5xl mx-auto">
+            {/* WIDGETS GIÁM SÁT */}
+            <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
+                <div className="bg-white p-5 rounded-3xl border shadow-sm text-center space-y-1">
+                    <p className="text-[9px] font-black text-stone-400 uppercase tracking-widest">Thành viên</p>
+                    <p className="text-2xl font-black text-stone-800 tracking-tighter">{globalMembers.length}</p>
+                </div>
+                <div className="bg-white p-5 rounded-3xl border shadow-sm text-center space-y-1">
+                    <p className="text-[9px] font-black text-stone-400 uppercase tracking-widest">Lượt truy cập</p>
+                    <p className="text-2xl font-black text-blue-700 tracking-tighter">{systemData?.stats?.views || 0}</p>
+                </div>
+                <div className="bg-white p-5 rounded-3xl border shadow-sm text-center space-y-1">
+                    <p className="text-[9px] font-black text-stone-400 uppercase tracking-widest">Dung lượng R2</p>
+                    <p className="text-2xl font-black text-orange-700 tracking-tighter">{systemData?.stats?.r2_size || '0 MB'}</p>
+                </div>
+                <div className="bg-white p-5 rounded-3xl border shadow-sm text-center space-y-1">
+                    <p className="text-[9px] font-black text-stone-400 uppercase tracking-widest">Database</p>
+                    <p className="text-2xl font-black text-green-700 tracking-tighter">Ready</p>
+                </div>
+            </div>
+
+            {/* CÔNG CỤ SAO LƯU */}
+            <section className="bg-stone-800 p-8 rounded-[2.5rem] text-white space-y-6 shadow-2xl relative overflow-hidden group">
+                <div className="absolute top-0 right-0 p-10 opacity-10 group-hover:rotate-12 transition-transform"><Database size={160}/></div>
+                <div className="relative">
+                    <h3 className="text-xl font-black uppercase tracking-tighter flex items-center gap-3"><RefreshCcw /> Sao lưu & Khôi phục (Local)</h3>
+                    <p className="text-stone-400 text-xs mt-2 max-w-xl leading-relaxed">Hãy tải bản sao lưu (file JSON) về máy tính cá nhân hàng tháng. Thao tác khôi phục sẽ xóa sạch dữ liệu hiện tại để ghi đè từ file, chỉ dùng khi hệ thống gặp sự cố nghiêm trọng.</p>
+                </div>
+                <div className="flex flex-col sm:flex-row gap-4 relative">
+                    <button onClick={handleBackup} className="px-8 py-4 bg-white text-stone-900 rounded-2xl font-black uppercase text-xs flex items-center gap-2 hover:bg-stone-100 transition-colors shadow-lg"><Download size={18}/> Tải về Bản sao lưu (.json)</button>
+                    <label className="px-8 py-4 bg-stone-700 text-stone-300 rounded-2xl font-black uppercase text-xs flex items-center gap-2 cursor-pointer border border-stone-600 hover:border-white transition-all">
+                        <Upload size={18}/> {isSaving ? "Đang xử lý..." : "Khôi phục từ file"}
+                        <input type="file" accept=".json" className="hidden" onChange={handleRestore} disabled={isSaving} />
+                    </label>
+                </div>
+            </section>
+
+            {/* THÙNG RÁC */}
+            <section className="space-y-4">
+              <h3 className="text-xs font-black text-stone-400 uppercase flex items-center gap-2 tracking-widest"><Trash2 size={16}/> Thùng rác (Thành viên bị ẩn)</h3>
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                {systemData?.recycleBin?.map((m: any) => (
+                  <div key={m.id} className="bg-white p-5 rounded-3xl border flex justify-between items-center shadow-sm hover:border-blue-200 transition-colors">
+                    <div>
+                        <p className="font-black text-stone-800 text-sm">{m.full_name.toUpperCase()}</p>
+                        <p className="text-[10px] text-stone-400 uppercase font-bold">ID: {m.id}</p>
+                    </div>
+                    <div className="flex gap-2">
+                      <button onClick={() => handleSecurityAction('RESTORE_MEMBER', { id: m.id })} className="p-3 bg-green-50 text-green-600 rounded-xl hover:bg-green-100" title="Khôi phục"><RefreshCcw size={16}/></button>
+                      <button onClick={() => window.confirm("XÓA VĨNH VIỄN? Không thể hoàn tác.") && handleSecurityAction('HARD_DELETE_MEMBER', { id: m.id })} className="p-3 bg-red-50 text-red-600 rounded-xl hover:bg-red-100" title="Xóa cứng"><X size={16}/></button>
+                    </div>
+                  </div>
+                ))}
+                {systemData?.recycleBin?.length === 0 && <div className="col-span-full py-10 bg-white rounded-3xl border border-dashed border-stone-200 text-center text-xs text-stone-400 italic">Thùng rác đang trống</div>}
+              </div>
+            </section>
+
+            {/* NHẬT KÝ */}
+            <section className="space-y-4">
+              <h3 className="text-xs font-black text-stone-400 uppercase flex items-center gap-2 tracking-widest"><History size={16}/> Nhật ký thao tác (Audit Logs)</h3>
+              <div className="bg-white rounded-[2rem] border overflow-hidden shadow-sm">
+                <div className="max-h-96 overflow-y-auto custom-scrollbar">
+                    {systemData?.auditLogs?.map((log: any) => (
+                    <div key={log.id} className="p-4 border-b last:border-0 hover:bg-stone-50 transition-colors flex items-start gap-4">
+                        <div className="p-2 bg-stone-100 rounded-lg text-stone-400"><Clock size={16} /></div>
+                        <div className="flex-1">
+                            <p className="text-xs text-stone-600 leading-relaxed">
+                                <span className="font-black text-blue-800 uppercase text-[10px] tracking-tight">[{log.author_name}]</span> {log.action}: <span className="font-bold text-stone-800 italic">"{log.target_name}"</span>
+                            </p>
+                            <p className="text-[9px] text-stone-400 mt-1 font-bold">{new Date(log.timestamp).toLocaleString()}</p>
+                        </div>
+                    </div>
+                    ))}
+                </div>
+              </div>
+            </section>
+          </div>
+        )}
       </div>
 
       {editingMember && (
         <MemberForm 
-          member={editingMember} allMembers={globalMembers} isNew={formMode !== 'edit'} 
+          member={editingMember} allMembers={globalMembers} isNew={formMode === 'add'} 
           onCancel={() => { setEditingMember(null); setFormMode(null); }}
-          onSave={handleSaveMember} 
-          onDelete={handleDeleteMember}
-          authorInfo={{ role: auth.role, name: auth.user?.name }}
+          onSave={handleSaveMember} onDelete={handleDeleteMember}
+          authorInfo={{ role: auth.role, name: auth.mod_name }}
         />
       )}
 
-      {/* FORM CÀI ĐẶT TỘC PHẢ */}
-      {isFamilyModalOpen && (
-        <div className="fixed inset-0 z-[150] bg-black/60 backdrop-blur-sm flex items-center justify-center p-4">
-          <div className="bg-white w-full max-w-xl rounded-[2.5rem] shadow-2xl flex flex-col max-h-[90vh] overflow-hidden animate-in zoom-in-95">
-             <div className="p-8 border-b bg-stone-50 flex justify-between items-center shrink-0">
-              <h3 className="font-black text-xl text-stone-800 uppercase tracking-tighter">Thông tin dòng tộc</h3>
-              <button onClick={() => setIsFamilyModalOpen(false)} className="p-2 text-stone-400 hover:text-red-500 transition-colors"><X size={24}/></button>
-            </div>
-            <div className="p-8 space-y-6 overflow-y-auto custom-scrollbar">
-              <input type="text" value={tempName} onChange={(e) => setTempName(e.target.value)} className="w-full p-4 bg-stone-50 rounded-2xl border border-stone-200 font-black text-stone-800 uppercase outline-none focus:ring-2 ring-purple-500" placeholder="Tên Tộc phả" />
-              <textarea rows={4} value={tempAbout} onChange={(e) => setTempAbout(e.target.value)} className="w-full p-4 bg-stone-50 rounded-2xl border border-stone-200 text-sm text-stone-700 outline-none focus:ring-2 ring-purple-500" placeholder="Giới thiệu"></textarea>
-              <div className="space-y-3 pt-4 border-t border-stone-200">
-                <div className="flex justify-between items-center"><label className="text-[10px] font-black text-stone-500 uppercase">Album ({tempPhotos.length}/10)</label><button onClick={() => setTempPhotos([...tempPhotos, { url: "", caption: "" }])} className="text-purple-600 bg-purple-50 px-2 py-1 rounded-md text-[10px] font-bold uppercase">+ Thêm</button></div>
-                {tempPhotos.map((p, idx) => (
-                  <div key={idx} className="p-3 bg-stone-50 rounded-xl border border-stone-200 space-y-2">
-                    <div className="flex gap-2"><input type="text" value={p.url} onChange={(e) => { const n = [...tempPhotos]; n[idx].url = e.target.value; setTempPhotos(n); }} className="flex-1 p-2 bg-white rounded-lg border text-xs outline-none" placeholder="URL" /><button onClick={() => setTempPhotos(tempPhotos.filter((_, i) => i !== idx))} className="text-red-400"><X size={16}/></button></div>
-                    <input type="text" value={p.caption} onChange={(e) => { const n = [...tempPhotos]; n[idx].caption = e.target.value; setTempPhotos(n); }} className="w-full p-2 bg-white rounded-lg border text-[10px] italic outline-none" placeholder="Chú thích" />
-                  </div>
-                ))}
-              </div>
-            </div>
-            <div className="p-8 border-t bg-stone-50 flex gap-3 shrink-0"><button onClick={() => setIsFamilyModalOpen(false)} className="flex-1 py-4 bg-stone-200 text-stone-600 rounded-2xl font-black uppercase text-xs">Hủy</button><button onClick={() => handleSaveFamilySettings(tempAbout, tempName, tempPhotos)} className="flex-[2] py-4 bg-purple-600 text-white rounded-2xl font-black uppercase text-xs shadow-lg hover:bg-purple-700 transition-all flex items-center justify-center gap-2"><Save size={18} /> Lưu</button></div>
-          </div>
-        </div>
-      )}
-
-      {/* MODAL PHÂN QUYỀN */}
-      {modModal.isOpen && (
-        <div className="fixed inset-0 z-[160] bg-black/60 backdrop-blur-sm flex items-center justify-center p-4">
-          <div className="bg-white w-full max-w-sm rounded-[2rem] shadow-2xl overflow-hidden animate-in zoom-in-95">
-            <div className="p-6 border-b bg-stone-50 flex justify-between items-center"><h3 className="font-black text-lg uppercase tracking-tighter">Phân quyền</h3>{modModal.step === 1 && <button onClick={() => setModModal({ ...modModal, isOpen: false })}><X size={20}/></button>}</div>
-            {modModal.step === 1 ? (
-              <div className="p-6 space-y-6">
-                <p className="text-xs font-bold text-blue-800 bg-blue-50 p-3 rounded-xl">Nhánh: {modModal.member?.fullName}</p>
-                <input type="text" value={modModal.modName} onChange={(e) => setModModal({...modModal, modName: e.target.value})} placeholder="Tên Quản trị..." className="w-full p-4 bg-stone-50 rounded-2xl border text-sm font-bold outline-none focus:ring-2 ring-blue-500" />
-                <button onClick={handleCreateModSubmit} disabled={!modModal.modName.trim()} className="w-full py-4 bg-blue-600 text-white rounded-2xl font-black uppercase text-xs shadow-lg disabled:opacity-50">Tạo Mã</button>
-              </div>
-            ) : (
-              <div className="p-8 space-y-6 text-center">
-                <div className="text-5xl font-mono tracking-widest font-black text-blue-600 bg-blue-50 py-4 rounded-3xl border-2 border-blue-200">{modModal.generatedPin}</div>
-                <p className="text-[10px] text-red-600 font-bold italic">Lưu ý: Mã này chỉ hiển thị MỘT LẦN DUY NHẤT!</p>
-                <button onClick={() => { navigator.clipboard.writeText(modModal.generatedPin); alert('Đã copy!'); }} className="w-full py-4 bg-stone-100 rounded-2xl font-black uppercase text-xs flex items-center justify-center gap-2"><Copy size={16}/> Copy Mã PIN</button>
-                <button onClick={() => setModModal({ ...modModal, isOpen: false })} className="w-full py-4 bg-blue-600 text-white rounded-2xl font-black uppercase text-xs">Xong</button>
-              </div>
-            )}
-          </div>
-        </div>
-      )}
-
-      {/* MODAL LỊCH SỬ (Audit Log) */}
-      {isLogModalOpen && (
-        <div className="fixed inset-0 z-[150] bg-black/60 backdrop-blur-sm flex items-center justify-center p-4">
-          <div className="bg-white w-full max-w-2xl rounded-[2.5rem] shadow-2xl flex flex-col max-h-[85vh] overflow-hidden">
-            <div className="p-6 border-b bg-stone-50 flex justify-between items-center shrink-0">
-              <div className="flex items-center gap-3"><History size={20} /><h3 className="font-black text-lg uppercase tracking-tighter">Lịch sử Thao tác</h3></div>
-              <button onClick={() => setIsLogModalOpen(false)}><X size={24}/></button>
-            </div>
-            <div className="p-6 overflow-y-auto custom-scrollbar flex-1 bg-stone-50/50">
-              {isLoadingLogs ? <div className="py-10 text-center animate-pulse uppercase text-xs font-bold">Đang tải...</div> : (
-                <div className="space-y-3">
-                  {auditLogs.map((log: any, idx: number) => (
-                    <div key={idx} className="bg-white p-4 rounded-2xl border shadow-sm flex items-start gap-4">
-                      <Clock size={16} className="text-stone-400 mt-1 shrink-0" />
-                      <div><p className="text-sm font-bold text-stone-800 leading-tight">{log.commit?.message}</p><p className="text-[10px] text-stone-400 font-black uppercase mt-1">{new Date(log.commit?.author?.date).toLocaleString('vi-VN')}</p></div>
-                    </div>
-                  ))}
-                </div>
-              )}
-            </div>
-          </div>
-        </div>
-      )}
-
       {isSaving && (
-        <div className="fixed inset-0 z-[300] bg-white/90 backdrop-blur-sm flex flex-col items-center justify-center">
-          <Loader2 className="animate-spin text-blue-600 mb-4" size={48} />
-          <p className="font-black text-blue-800 uppercase text-xs tracking-widest">{loadingText}</p>
+        <div className="fixed inset-0 z-[400] bg-white/70 backdrop-blur-md flex flex-col items-center justify-center animate-in fade-in">
+          <div className="p-10 bg-white rounded-[3rem] shadow-2xl flex flex-col items-center gap-6 border-2 border-[#704214]/10">
+            <Loader2 className="animate-spin text-[#704214]" size={48} />
+            <div className="text-center">
+                <p className="text-xs font-black uppercase tracking-widest text-stone-800">Đang đồng bộ</p>
+                <p className="text-[9px] text-stone-400 font-bold uppercase mt-1 italic">Vui lòng không đóng trình duyệt...</p>
+            </div>
+          </div>
         </div>
       )}
     </div>

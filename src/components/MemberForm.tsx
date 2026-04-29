@@ -1,7 +1,8 @@
-// src/components/MemberForm.tsx -- Version 4.4
+// src/components/MemberForm.tsx -- version 3.2
 
 import React, { useState, useEffect, useRef, useMemo } from 'react';
 import { Save, X, Trash2, HelpCircle, UploadCloud, User, Loader2 } from 'lucide-react';
+import { getNextSolarAnniversary } from '../utils/lunarUtils';
 
 interface MemberFormProps {
   member: any;
@@ -10,7 +11,6 @@ interface MemberFormProps {
   onCancel: () => void;
   onDelete?: (id: string) => void;
   isNew?: boolean;
-  // Bổ sung prop để nhận thông tin người đang đăng nhập
   authorInfo?: { role: string; name?: string }; 
 }
 
@@ -29,82 +29,125 @@ const formatTitleCase = (str: string) => {
   return str.toLowerCase().replace(/(?:^|\s)\S/g, (a) => a.toUpperCase());
 };
 
+const parseDateString = (dateStr?: string | null) => {
+  if (!dateStr) return { dd: '', mm: '', yyyy: '' };
+  const parts = dateStr.split(/[-/]/);
+  if (parts.length === 1) return { dd: '', mm: '', yyyy: parts[0] };
+  if (parts.length === 3) return { dd: parts[0], mm: parts[1], yyyy: parts[2] };
+  return { dd: '', mm: '', yyyy: '' };
+};
+
+const parseLunarDate = (dateStr?: string | null) => {
+  if (!dateStr) return { dd: '', mm: '' };
+  const parts = dateStr.split(/[-/]/);
+  if (parts.length === 2) return { dd: parts[0], mm: parts[1] };
+  return { dd: '', mm: '' };
+};
+
 const MemberForm: React.FC<MemberFormProps> = ({ member, allMembers, onSave, onCancel, onDelete, isNew, authorInfo }) => {
-  const [formData, setFormData] = useState<any>(member);
+  const [formData, setFormData] = useState<any>({
+    id: member.id || '',
+    full_name: member.full_name || member.fullName || '',
+    alias: member.alias || member.nickname || '',
+    gender: member.gender || 'M',
+    relation_status: member.relation_status || member.relationType || 'biological',
+    is_alive: member.is_alive !== undefined ? member.is_alive : 1,
+    father_id: member.father_id || null,
+    mother_id: member.mother_id || null,
+    location: member.location || '',
+    biography: member.biography || '',
+    notes: member.notes || member.note || '',
+    avatar_url: member.avatar_url || null,
+    rank_in_family: member.rank_in_family || member.siblingRank || 1,
+    _bloodlineSpouseId: member._bloodlineSpouseId || '',
+    _marriageStatus: member._marriageStatus || 'current'
+  });
+
+  const [birth, setBirth] = useState({ ...parseDateString(member.birthday), isApproximate: member.is_birth_approximate === 1 });
+  const [death, setDeath] = useState({ ...parseDateString(member.death_date), isApproximate: member.is_death_approximate === 1 });
+  
+  // State quản lý ngày giỗ Âm Lịch
+  const initialLunar = parseLunarDate(member.lunar_death_date);
+  const [lunarDeathDay, setLunarDeathDay] = useState(initialLunar.dd);
+  const [lunarDeathMonth, setLunarDeathMonth] = useState(initialLunar.mm);
+
   const [imagePreview, setImagePreview] = useState<string | null>(null);
   const [isCompressing, setIsCompressing] = useState(false);
   const fileInputRef = useRef<HTMLInputElement>(null);
 
-  // 1. Phục hồi ảnh preview từ LocalStorage
-  useEffect(() => {
-    if (!isNew && !imagePreview) {
-      const localImg = localStorage.getItem(`public/images/${member.id}.webp`);
-      if (localImg) {
-        setImagePreview(localImg.startsWith('data:') ? localImg : `data:image/webp;base64,${localImg}`);
-      }
+  // Tính toán Preview Ngày giỗ Dương Lịch sắp tới
+  const previewSolarAnniversary = useMemo(() => {
+    if (lunarDeathDay && lunarDeathMonth && lunarDeathDay.length > 0 && lunarDeathMonth.length > 0) {
+      return getNextSolarAnniversary(`${lunarDeathDay.padStart(2, '0')}/${lunarDeathMonth.padStart(2, '0')}`);
     }
-  }, [formData.id, isNew, imagePreview]);
+    return null;
+  }, [lunarDeathDay, lunarDeathMonth]);
 
-  // 2. Khởi tạo ID tự động cho người mới
   useEffect(() => {
     if (isNew && !formData.id) {
-      const ids = allMembers.map(m => parseInt(m.id.replace(/\D/g, '')) || 0);
-      const maxId = ids.length > 0 ? Math.max(...ids) : 0;
-      const nextId = `P${String(maxId + 1).padStart(3, '0')}`;
-      
-      setFormData((prev: any) => ({
-        ...prev, id: nextId, lifeStatus: 'alive'
-      }));
+      const nextId = `P${Date.now()}`;
+      setFormData((prev: any) => ({ ...prev, id: nextId, is_alive: 1 }));
     }
-  }, [isNew, allMembers]);
+  }, [isNew, formData.id]);
 
-  // 3. THUẬT TOÁN THÔNG MINH: Nhận diện Tình trạng Hôn nhân
   useEffect(() => {
-    if (formData.relationType === 'in_law' && formData._marriageStatus === undefined) {
-        let spId = '';
-        let stat = 'current';
-
-        if (isNew && formData.spouses?.length > 0) {
-            spId = formData.spouses[0].id;
-            stat = formData.spouses[0].status;
-        } else {
-            const sp = allMembers.find(m => m.spouses?.some((s:any) => s.id === formData.id));
-            if (sp) {
-                spId = sp.id;
-                stat = sp.spouses.find((s:any) => s.id === formData.id)?.status || 'current';
-            }
+      if (formData.relation_status === 'in_law') {
+      if (member._bloodlineSpouseId && !formData._bloodlineSpouseId) {
+        setFormData((prev: any) => ({ 
+          ...prev, 
+          _bloodlineSpouseId: member._bloodlineSpouseId,
+          _marriageStatus: member._marriageStatus || 'current'
+        }));
+      } 
+      else if (!formData._bloodlineSpouseId && !isNew) {
+        const spouseRelation = allMembers.find(m => m.spouses?.some((s: any) => s.id === formData.id));
+        if (spouseRelation) {
+          const relationDetail = spouseRelation.spouses.find((s: any) => s.id === formData.id);
+          setFormData((prev: any) => ({
+            ...prev,
+            _bloodlineSpouseId: spouseRelation.id,
+            _marriageStatus: relationDetail?.status || 'current'
+          }));
         }
-
-        if (spId) {
-            setFormData((prev: any) => ({...prev, _marriageStatus: stat, _bloodlineSpouseId: spId}));
-        }
+      }
     }
-  }, [formData.relationType, formData.id, isNew, allMembers, formData.spouses]);
+  }, [formData.relation_status, member, allMembers, isNew]);
 
-  // 4. THUẬT TOÁN THÔNG MINH: Lọc danh sách Cha/Mẹ
   const parentInfo = useMemo(() => {
-    if (formData.relationType === 'in_law') return null;
-    const fId = formData.parents?.fatherId;
-    const mId = formData.parents?.motherId;
+    if (formData.relation_status === 'in_law') return null;
+    const fId = formData.father_id;
+    const mId = formData.mother_id;
     if (!fId && !mId) return null; 
 
     const f = allMembers.find(m => m.id === fId);
     const m = allMembers.find(m => m.id === mId);
 
     let bloodline = null;
-    if (f && f.relationType !== 'in_law') bloodline = f;
-    else if (m && m.relationType !== 'in_law') bloodline = m;
+    if (f && f.relation_status !== 'in_law') bloodline = f;
+    else if (m && m.relation_status !== 'in_law') bloodline = m;
     else bloodline = f || m;
 
     if (!bloodline) return null;
-    const otherRole = bloodline.gender === 'M' ? 'motherId' : 'fatherId';
+    const otherRole = bloodline.gender === 'M' ? 'mother_id' : 'father_id';
+    
     const spouses = (bloodline.spouses || []).map((s:any) => {
         const sp = allMembers.find(member => member.id === s.id);
-        return { id: s.id, name: sp?.fullName || s.id };
+        return { id: s.id, name: sp?.full_name || sp?.fullName || s.id };
     });
 
     return { bloodline, otherRole, spouses };
-  }, [formData.relationType, formData.parents, allMembers]);
+  }, [formData.relation_status, formData.father_id, formData.mother_id, allMembers]);
+
+  useEffect(() => {
+    if (isNew && parentInfo && parentInfo.spouses.length === 1) {
+      setFormData((prev: any) => {
+        if (prev[parentInfo.otherRole] === null) {
+          return { ...prev, [parentInfo.otherRole]: parentInfo.spouses[0].id };
+        }
+        return prev;
+      });
+    }
+  }, [isNew, parentInfo]);
 
   const handleImageUpload = (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
@@ -116,7 +159,7 @@ const MemberForm: React.FC<MemberFormProps> = ({ member, allMembers, onSave, onC
       img.onload = () => {
         const canvas = document.createElement('canvas');
         let width = img.width; let height = img.height;
-        const MAX_SIZE = 1200;
+        const MAX_SIZE = 1200; 
         if (width > height && width > MAX_SIZE) { height *= MAX_SIZE / width; width = MAX_SIZE; } 
         else if (height > MAX_SIZE) { width *= MAX_SIZE / height; height = MAX_SIZE; }
         canvas.width = width; canvas.height = height;
@@ -124,91 +167,117 @@ const MemberForm: React.FC<MemberFormProps> = ({ member, allMembers, onSave, onC
         ctx?.drawImage(img, 0, 0, width, height);
         setImagePreview(canvas.toDataURL('image/webp', 0.90));
         setIsCompressing(false);
+        // Khi up ảnh mới, đảm bảo avatar_url khác rỗng để backend biết
+        setFormData((prev: any) => ({ ...prev, avatar_url: 'pending' })); 
       };
       img.src = event.target?.result as string;
     };
     reader.readAsDataURL(file);
   };
 
+  // Logic Xóa Ảnh
+  const handleRemoveImage = () => {
+    setImagePreview(null);
+    setFormData((prev: any) => ({ ...prev, avatar_url: '' })); // Đánh dấu là đã xóa ảnh
+    if (fileInputRef.current) {
+        fileInputRef.current.value = ''; // Reset input file
+    }
+  };
+
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault();
+    
+    const buildDate = (d: any) => {
+      if (!d.yyyy) return null;
+      if (d.dd && d.mm) return `${String(d.dd).padStart(2,'0')}/${String(d.mm).padStart(2,'0')}/${d.yyyy}`;
+      return `${d.yyyy}`;
+    };
+
     const formattedData = {
       ...formData,
-      fullName: formatTitleCase(formData.fullName),
-      nickname: formatTitleCase(formData.nickname)
+      full_name: formatTitleCase(formData.full_name),
+      alias: formatTitleCase(formData.alias),
+      birthday: buildDate(birth),
+      is_birth_approximate: birth.isApproximate ? 1 : 0,
+      death_date: formData.is_alive === 1 ? null : buildDate(death),
+      is_death_approximate: death.isApproximate ? 1 : 0,
+      lunar_death_date: (formData.is_alive === 0 && lunarDeathDay && lunarDeathMonth) 
+        ? `${String(lunarDeathDay).padStart(2,'0')}/${String(lunarDeathMonth).padStart(2,'0')}` 
+        : null,
     };
+
+    // Truyền imagePreview. Nếu vừa xóa ảnh (avatar_url = ''), backend sẽ tự xử lý
     onSave(formattedData, imagePreview || undefined);
   };
   
-  const isAlive = formData.lifeStatus === 'alive';
-  const isInLaw = formData.relationType === 'in_law';
+  const isAlive = formData.is_alive === 1;
+  const isInLaw = formData.relation_status === 'in_law';
 
   return (
     <div className="fixed inset-0 z-50 bg-black/60 backdrop-blur-sm flex items-center justify-center p-4 sm:p-6">
       <form onSubmit={handleSubmit} className="bg-white w-full max-w-3xl rounded-[2rem] shadow-2xl flex flex-col max-h-full overflow-hidden animate-in zoom-in-95">
         
         {/* HEADER */}
-        <div className="flex justify-between items-center p-6 border-b bg-stone-50 rounded-t-[2rem]">
+        <div className="flex justify-between items-center p-6 border-b bg-stone-50 rounded-t-[2rem] shrink-0">
           <div>
             <h3 className="font-black text-xl text-stone-800 uppercase tracking-tight">
               {isNew ? 'THÊM THÀNH VIÊN MỚI' : `CHỈNH SỬA HỒ SƠ: ${formData.id}`}
             </h3>
-            {/* THAY ĐỔI DÒNG CHỮ Ở ĐÂY */}
             <p className="text-[11px] text-stone-500 font-bold uppercase mt-1">
-              Người cập nhật: {authorInfo?.role === 'super' ? 'Trưởng tộc' : `Quản trị nhánh: ${authorInfo?.name || 'Ẩn danh'}`}
+              Người thao tác: {authorInfo?.role === 'super' || authorInfo?.role === 'sm' ? 'Trưởng tộc' : `Mod nhánh: ${authorInfo?.name || 'Ẩn danh'}`}
             </p>
           </div>
           <button type="button" onClick={onCancel} className="p-2 text-stone-400 hover:text-red-500 hover:bg-red-50 rounded-full transition-colors"><X size={24}/></button>
         </div>
 
-        <div className="flex-1 overflow-y-auto p-6 space-y-8">
-          {/* ... GIỮ NGUYÊN PHẦN BODY NHƯ CŨ ... */}
+        <div className="flex-1 overflow-y-auto p-6 space-y-8 custom-scrollbar">
           
           {/* THÔNG TIN CƠ BẢN */}
           <div className="space-y-4">
             <h4 className="text-xs font-black text-blue-800 border-b-2 border-blue-100 pb-2 uppercase flex items-center gap-2">Thông tin cơ bản</h4>
             <div className="flex flex-col sm:flex-row gap-6">
-              <div className="flex flex-col items-center gap-3">
+              
+              {/* KHU VỰC ẢNH ĐẠI DIỆN */}
+              <div className="flex flex-col items-center gap-3 shrink-0">
                 <div className="w-28 h-28 rounded-3xl bg-stone-100 border-2 border-dashed border-stone-300 flex items-center justify-center overflow-hidden relative group">
                   {imagePreview ? (
                     <img src={imagePreview} className="w-full h-full object-cover" alt="Preview" />
-                  ) : !isNew ? (
-                    <img src={`/images/${formData.id}.webp`}
-                         onError={(e) => {
-                           const target = e.currentTarget;
-                           const currentExt = target.src.match(/\.(webp|jpg|png|jpeg)$/)?.[0] || '';
-                           const exts = ['.webp', '.jpg', '.png', '.jpeg'];
-                           const nextIdx = exts.indexOf(currentExt) + 1;
-                           if (nextIdx < exts.length) target.src = `/images/${formData.id}${exts[nextIdx]}`;
-                           else target.style.display = 'none';
-                         }} 
-                         className="w-full h-full object-cover absolute inset-0 z-10" />
+                  ) : formData.avatar_url ? (
+                    <img src={formData.avatar_url} className="w-full h-full object-cover absolute inset-0 z-10" onError={(e) => e.currentTarget.style.display='none'} />
                   ) : null}
                   <User size={40} className="text-stone-300 absolute z-0" />
-                  <div className="absolute inset-0 bg-black/50 opacity-0 group-hover:opacity-100 transition-opacity flex items-center justify-center z-20">
+                  <div className="absolute inset-0 bg-black/50 opacity-0 group-hover:opacity-100 transition-opacity flex items-center justify-center z-20 cursor-pointer" onClick={() => fileInputRef.current?.click()}>
                     <UploadCloud className="text-white" size={24} />
                   </div>
                 </div>
-                <input type="file" accept="image/*" className="hidden" ref={fileInputRef} onChange={handleImageUpload} />
-                <button type="button" onClick={() => fileInputRef.current?.click()} className="text-[10px] font-black bg-stone-100 hover:bg-stone-200 px-3 py-1.5 rounded-lg flex items-center gap-1 uppercase transition-colors">
-                  {isCompressing ? <Loader2 size={14} className="animate-spin" /> : 'Thay Ảnh'}
-                </button>
+                <input type="file" accept="image/jpeg, image/png, image/webp" className="hidden" ref={fileInputRef} onChange={handleImageUpload} />
+                
+                <div className="flex flex-col w-full gap-2 mt-1">
+                    <button type="button" onClick={() => fileInputRef.current?.click()} className="text-[10px] w-full justify-center font-black bg-stone-100 hover:bg-stone-200 px-3 py-2 rounded-lg flex items-center gap-1 uppercase transition-colors">
+                      {isCompressing ? <Loader2 size={14} className="animate-spin" /> : 'Thay Ảnh'}
+                    </button>
+                    {(imagePreview || formData.avatar_url) && (
+                        <button type="button" onClick={handleRemoveImage} className="text-[10px] w-full justify-center font-black text-red-500 bg-red-50 hover:bg-red-100 px-3 py-2 rounded-lg flex items-center gap-1 uppercase transition-colors">
+                          <Trash2 size={14} /> Xóa Ảnh
+                        </button>
+                    )}
+                </div>
               </div>
 
               <div className="flex-1 grid grid-cols-1 sm:grid-cols-2 gap-4">
                 <div className="sm:col-span-2">
                   <label className="text-[10px] font-black text-stone-500 uppercase mb-1 block">* Họ và tên</label>
                   <input required type="text" className="w-full p-3 bg-stone-50 rounded-xl border border-stone-200 focus:ring-2 ring-blue-500 outline-none font-bold" 
-                         value={formData.fullName || ''} 
-                         onChange={(e) => setFormData({...formData, fullName: e.target.value})} 
-                         onBlur={(e) => setFormData({...formData, fullName: formatTitleCase(e.target.value)})} />
+                         value={formData.full_name} 
+                         onChange={(e) => setFormData({...formData, full_name: e.target.value})} 
+                         onBlur={(e) => setFormData({...formData, full_name: formatTitleCase(e.target.value)})} />
                 </div>
                 <div>
                   <label className="text-[10px] font-black text-stone-500 uppercase mb-1 block">Biệt danh / Tên tự</label>
-                  <input type="text" className="w-full p-3 bg-stone-50 rounded-xl border border-stone-200" 
-                         value={formData.nickname || ''} 
-                         onChange={(e) => setFormData({...formData, nickname: e.target.value})} 
-                         onBlur={(e) => setFormData({...formData, nickname: formatTitleCase(e.target.value)})} />
+                  <input type="text" className="w-full p-3 bg-stone-50 rounded-xl border border-stone-200 focus:ring-2 ring-blue-500 outline-none" 
+                         value={formData.alias} 
+                         onChange={(e) => setFormData({...formData, alias: e.target.value})} 
+                         onBlur={(e) => setFormData({...formData, alias: formatTitleCase(e.target.value)})} />
                 </div>
                 <div>
                   <label className="text-[10px] font-black text-stone-500 uppercase mb-1 block">* Giới tính</label>
@@ -220,59 +289,96 @@ const MemberForm: React.FC<MemberFormProps> = ({ member, allMembers, onSave, onC
                 <div className="sm:col-span-2">
                   <label className="text-[10px] font-black text-stone-500 uppercase mb-1 block">* Trạng thái sự sống</label>
                   <div className="flex gap-4 p-3 bg-stone-50 rounded-xl border border-stone-200">
-                    <label className="flex items-center gap-2 text-sm font-bold cursor-pointer text-green-700"><input type="radio" checked={isAlive} onChange={() => setFormData({...formData, lifeStatus: 'alive'})} /> Còn sống</label>
-                    <label className="flex items-center gap-2 text-sm font-bold cursor-pointer text-red-700"><input type="radio" checked={!isAlive} onChange={() => setFormData({...formData, lifeStatus: 'deceased'})} /> Đã mất</label>
+                    <label className="flex items-center gap-2 text-sm font-bold cursor-pointer text-green-700"><input type="radio" checked={isAlive} onChange={() => setFormData({...formData, is_alive: 1})} /> Còn sống</label>
+                    <label className="flex items-center gap-2 text-sm font-bold cursor-pointer text-red-700"><input type="radio" checked={!isAlive} onChange={() => setFormData({...formData, is_alive: 0})} /> Đã mất</label>
                   </div>
                 </div>
               </div>
             </div>
           </div>
-          {/* ... (các phần khác giữ nguyên) ... */}
           
           {/* THÔNG TIN SINH / TỬ */}
           <div className="space-y-4">
             <h4 className="text-xs font-black text-blue-800 border-b-2 border-blue-100 pb-2 uppercase">Thông tin Sinh / Tử</h4>
-            <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-              <div className="p-4 rounded-xl border border-stone-200 bg-stone-50 space-y-3">
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 items-start">
+              
+              <div className="p-4 rounded-xl border border-stone-200 bg-stone-50 space-y-3 h-full">
                 <label className="text-[10px] font-black text-stone-500 uppercase block">Ngày Sinh (DD/MM/YYYY)</label>
                 <div className="flex gap-2">
-                  <input type="number" placeholder="DD" className="w-16 p-2 rounded-lg border border-stone-300 text-center text-sm outline-none focus:border-blue-500" value={formData.birth?.dd || ''} onChange={(e) => setFormData({...formData, birth: {...formData.birth, dd: parseInt(e.target.value) || null}})} /> /
-                  <input type="number" placeholder="MM" className="w-16 p-2 rounded-lg border border-stone-300 text-center text-sm outline-none focus:border-blue-500" value={formData.birth?.mm || ''} onChange={(e) => setFormData({...formData, birth: {...formData.birth, mm: parseInt(e.target.value) || null}})} /> /
-                  <input type="number" placeholder="YYYY" className="w-24 p-2 rounded-lg border border-stone-300 text-center text-sm outline-none focus:border-blue-500" value={formData.birth?.yyyy || ''} onChange={(e) => setFormData({...formData, birth: {...formData.birth, yyyy: parseInt(e.target.value) || null}})} />
+                  <input type="text" maxLength={2} placeholder="DD" className="w-16 p-2 rounded-lg border text-center text-sm outline-none focus:border-blue-500" value={birth.dd} onChange={(e) => setBirth({...birth, dd: e.target.value.replace(/\D/g, '')})} /> /
+                  <input type="text" maxLength={2} placeholder="MM" className="w-16 p-2 rounded-lg border text-center text-sm outline-none focus:border-blue-500" value={birth.mm} onChange={(e) => setBirth({...birth, mm: e.target.value.replace(/\D/g, '')})} /> /
+                  <input type="text" maxLength={4} placeholder="YYYY" className="w-24 p-2 rounded-lg border text-center text-sm outline-none focus:border-blue-500" value={birth.yyyy} onChange={(e) => setBirth({...birth, yyyy: e.target.value.replace(/\D/g, '')})} />
                 </div>
-                <label className="flex items-center gap-2 text-xs text-stone-500"><input type="checkbox" checked={formData.birth?.isApproximate || false} onChange={(e) => setFormData({...formData, birth: {...formData.birth, isApproximate: e.target.checked}})} /> Chỉ nhớ khoảng năm</label>
+                <label className="flex items-center gap-2 text-xs text-stone-500"><input type="checkbox" checked={birth.isApproximate} onChange={(e) => setBirth({...birth, isApproximate: e.target.checked})} /> Chỉ nhớ khoảng năm</label>
               </div>
 
-              <div className={`p-4 rounded-xl border space-y-3 transition-colors ${isAlive ? 'bg-stone-100 border-transparent opacity-60' : 'bg-red-50 border-red-100'}`}>
-                <label className="text-[10px] font-black text-stone-500 uppercase flex items-center gap-1">Ngày Mất (DD/MM/YYYY)</label>
-                <div className="flex gap-2">
-                  <input disabled={isAlive} type="number" placeholder="DD" className="w-16 p-2 rounded-lg border border-stone-300 text-center text-sm outline-none focus:border-blue-500 disabled:bg-stone-200" value={formData.death?.dd || ''} onChange={(e) => setFormData({...formData, death: {...formData.death, dd: parseInt(e.target.value) || null}})} /> /
-                  <input disabled={isAlive} type="number" placeholder="MM" className="w-16 p-2 rounded-lg border border-stone-300 text-center text-sm outline-none focus:border-blue-500 disabled:bg-stone-200" value={formData.death?.mm || ''} onChange={(e) => setFormData({...formData, death: {...formData.death, mm: parseInt(e.target.value) || null}})} /> /
-                  <input disabled={isAlive} type="number" placeholder="YYYY" className="w-24 p-2 rounded-lg border border-stone-300 text-center text-sm outline-none focus:border-blue-500 disabled:bg-stone-200" value={formData.death?.yyyy || ''} onChange={(e) => setFormData({...formData, death: {...formData.death, yyyy: parseInt(e.target.value) || null}})} />
-                </div>
-                <div className="flex items-center justify-between">
-                   <label className="flex items-center gap-2 text-xs text-stone-500"><input disabled={isAlive} type="checkbox" checked={formData.death?.isApproximate || false} onChange={(e) => setFormData({...formData, death: {...formData.death, isApproximate: e.target.checked}})} /> Chỉ nhớ khoảng năm</label>
-                   <div className="flex items-center gap-2">
-                      <span className="text-[10px] font-black text-stone-500 uppercase">Giỗ Âm (DD/MM)</span>
-                      <input disabled={isAlive} type="text" placeholder="15/08" className="w-16 p-1.5 rounded border border-stone-300 text-center text-xs disabled:bg-stone-200" 
-                        value={formData.deathAnniversary?.displayText || (formData.deathAnniversary?.dd ? `${formData.deathAnniversary.dd}/${formData.deathAnniversary.mm}` : '')} 
-                        onChange={(e) => {
-                          const val = e.target.value; const parts = val.split('/');
-                          setFormData({ ...formData, deathAnniversary: { displayText: val, dd: parts[0] ? parseInt(parts[0]) : null, mm: parts[1] ? parseInt(parts[1]) : null } });
-                        }} 
+              <div className="space-y-4">
+                {!isAlive && (
+                  <div className="bg-orange-50 p-4 rounded-xl border border-orange-100 relative shadow-sm animate-in fade-in">
+                    <div className="flex justify-between items-center mb-3">
+                      <label className="text-[10px] font-black text-orange-800 uppercase tracking-widest">
+                        Ngày giỗ (Âm Lịch)
+                      </label>
+                      <span className="text-[10px] text-orange-600 font-bold italic">
+                        Tháng nhuận lấy tháng chính
+                      </span>
+                    </div>
+                    <div className="flex items-center gap-3">
+                      <input 
+                        type="text" 
+                        placeholder="DD" 
+                        maxLength={2}
+                        value={lunarDeathDay}
+                        onChange={(e) => setLunarDeathDay(e.target.value.replace(/\D/g, ''))}
+                        className="w-16 p-2 text-center border border-orange-200 rounded-lg text-sm bg-white focus:ring-2 focus:ring-orange-400 outline-none font-bold text-orange-900"
                       />
-                   </div>
+                      <span className="text-orange-400 font-black">/</span>
+                      <input 
+                        type="text" 
+                        placeholder="MM" 
+                        maxLength={2}
+                        value={lunarDeathMonth}
+                        onChange={(e) => setLunarDeathMonth(e.target.value.replace(/\D/g, ''))}
+                        className="w-16 p-2 text-center border border-orange-200 rounded-lg text-sm bg-white focus:ring-2 focus:ring-orange-400 outline-none font-bold text-orange-900"
+                      />
+                      <span className="text-xs text-orange-600 ml-2 italic">
+                        (VD: 10/03)
+                      </span>
+                    </div>
+                    
+                    {previewSolarAnniversary && (
+                      <div className="mt-3 text-[11px] font-bold text-blue-800 bg-blue-100/50 p-2 rounded-lg border border-blue-100 flex items-center gap-2">
+                        <span>🗓️</span> Giỗ Dương lịch sắp tới: {previewSolarAnniversary}
+                      </div>
+                    )}
+                  </div>
+                )}
+
+                <div className={`p-4 rounded-xl border space-y-3 transition-colors ${isAlive ? 'bg-stone-100 border-transparent opacity-60' : 'bg-stone-50 border-stone-200'}`}>
+                  <label className="text-[10px] font-black text-stone-500 uppercase flex items-center gap-1">Ngày Mất Dương Lịch (Nếu Nhớ)</label>
+                  <div className="flex gap-2">
+                    <input disabled={isAlive} type="text" maxLength={2} placeholder="DD" className="w-16 p-2 rounded-lg border text-center text-sm outline-none focus:border-stone-400 disabled:bg-stone-200" value={death.dd} onChange={(e) => setDeath({...death, dd: e.target.value.replace(/\D/g, '')})} /> /
+                    <input disabled={isAlive} type="text" maxLength={2} placeholder="MM" className="w-16 p-2 rounded-lg border text-center text-sm outline-none focus:border-stone-400 disabled:bg-stone-200" value={death.mm} onChange={(e) => setDeath({...death, mm: e.target.value.replace(/\D/g, '')})} /> /
+                    <input disabled={isAlive} type="text" maxLength={4} placeholder="YYYY" className="w-24 p-2 rounded-lg border text-center text-sm outline-none focus:border-stone-400 disabled:bg-stone-200" value={death.yyyy} onChange={(e) => setDeath({...death, yyyy: e.target.value.replace(/\D/g, '')})} />
+                  </div>
+                  <label className="flex items-center gap-2 text-xs text-stone-500"><input disabled={isAlive} type="checkbox" checked={death.isApproximate} onChange={(e) => setDeath({...death, isApproximate: e.target.checked})} /> Chỉ nhớ khoảng năm</label>
                 </div>
               </div>
             </div>
           </div>
 
+          {/* QUAN HỆ GIA ĐÌNH */}
           <div className="space-y-4">
             <h4 className="text-xs font-black text-blue-800 border-b-2 border-blue-100 pb-2 uppercase">Quan hệ gia đình</h4>
             <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
               <div>
                 <label className="text-[10px] font-black text-stone-500 uppercase mb-1 flex items-center gap-1">* Kiểu quan hệ</label>
-                <select disabled className="w-full p-3 bg-stone-100 rounded-xl border border-stone-200 text-sm font-bold text-stone-500 cursor-not-allowed" value={formData.relationType} onChange={(e) => setFormData({...formData, relationType: e.target.value})}>
+                  <select 
+                    className={`w-full p-3 rounded-xl border text-sm font-bold outline-none transition-colors ${isInLaw ? 'bg-stone-100 border-stone-200 text-stone-500 cursor-not-allowed' : 'bg-white border-blue-200 text-blue-900 focus:border-blue-500'}`} 
+                    value={formData.relation_status}
+                    onChange={(e) => setFormData({...formData, relation_status: e.target.value})}
+                    disabled={isInLaw} 
+                  >
                   <option value="biological">Con ruột</option>
                   <option value="adopted">Con nuôi</option>
                   <option value="in_law">Dâu / Rể</option>
@@ -283,7 +389,7 @@ const MemberForm: React.FC<MemberFormProps> = ({ member, allMembers, onSave, onC
               {!isInLaw && (
                   <div>
                     <label className="text-[10px] font-black text-stone-500 uppercase mb-1 flex items-center gap-1">Thứ tự trong nhà (Sinh thứ mấy) <HelpTooltip text="Giúp sắp xếp anh em trên cây từ trái qua phải." /></label>
-                    <input type="number" className="w-full p-3 bg-stone-50 rounded-xl border border-stone-200 outline-none focus:border-blue-500" placeholder="Ví dụ: 1, 2..." value={formData.siblingRank || ''} onChange={(e) => setFormData({...formData, siblingRank: parseInt(e.target.value)})} />
+                    <input type="number" className="w-full p-3 bg-stone-50 rounded-xl border border-stone-200 outline-none focus:border-blue-500" placeholder="Ví dụ: 1, 2..." value={formData.rank_in_family || ''} onChange={(e) => setFormData({...formData, rank_in_family: parseInt(e.target.value)})} />
                   </div>
               )}
 
@@ -293,19 +399,16 @@ const MemberForm: React.FC<MemberFormProps> = ({ member, allMembers, onSave, onC
                         <label className="text-[10px] font-black text-stone-500 uppercase mb-2 block">
                             * {parentInfo.bloodline.gender === 'M' ? 'Cha' : 'Mẹ'} (Người mang dòng họ)
                         </label>
-                        <input disabled type="text" className="w-full p-3 bg-stone-200 rounded-lg border border-stone-300 font-bold text-sm text-stone-600" value={parentInfo.bloodline.fullName} />
+                        <input disabled type="text" className="w-full p-3 bg-stone-200 rounded-lg border border-stone-300 font-bold text-sm text-stone-600" value={parentInfo.bloodline.full_name || parentInfo.bloodline.fullName} />
                     </div>
                     <div className="p-4 rounded-xl border bg-blue-50 border-blue-200">
                         <label className="text-[10px] font-black text-blue-800 uppercase mb-2 flex items-center gap-1">
-                            * {parentInfo.otherRole === 'motherId' ? 'Mẹ' : 'Cha'} (Khác họ) <HelpTooltip text="Chọn Không nếu là con riêng hoặc chưa rõ thông tin." />
+                            * {parentInfo.otherRole === 'mother_id' ? 'Mẹ' : 'Cha'} (Khác họ) <HelpTooltip text="Chọn Không nếu là con riêng hoặc chưa rõ thông tin." />
                         </label>
                         <select 
                             className="w-full p-3 bg-white rounded-lg border border-blue-200 font-bold text-sm outline-none focus:border-blue-500 text-blue-900"
-                            value={formData.parents?.[parentInfo.otherRole] || ''}
-                            onChange={(e) => setFormData({
-                                ...formData, 
-                                parents: { ...formData.parents, [parentInfo.otherRole]: e.target.value }
-                            })}
+                            value={formData[parentInfo.otherRole] || ''}
+                            onChange={(e) => setFormData({...formData, [parentInfo.otherRole]: e.target.value })}
                         >
                             <option value="">-- KHÔNG (Con riêng / Chưa rõ) --</option>
                             {parentInfo.spouses.map((s:any) => (
@@ -316,20 +419,20 @@ const MemberForm: React.FC<MemberFormProps> = ({ member, allMembers, onSave, onC
                   </>
               )}
 
-              {formData.relationType === 'in_law' && formData._bloodlineSpouseId && (
+              {isInLaw && formData._bloodlineSpouseId && (
                   <>
                     <div className="p-4 rounded-xl border bg-stone-50 border-stone-200">
                         <label className="text-[10px] font-black text-stone-500 uppercase mb-2 block">
                             {formData.gender === 'M' ? 'Là Chồng của' : 'Là Vợ của'}
                         </label>
                         <input disabled type="text" className="w-full p-3 bg-stone-200 rounded-lg border border-stone-300 font-bold text-sm text-stone-600" 
-                               value={allMembers.find(m => m.id === formData._bloodlineSpouseId)?.fullName} />
+                               value={allMembers.find(m => m.id === formData._bloodlineSpouseId)?.full_name || allMembers.find(m => m.id === formData._bloodlineSpouseId)?.fullName} />
                     </div>
                     <div className="p-4 rounded-xl border bg-pink-50 border-pink-200">
                         <label className="text-[10px] font-black text-pink-800 uppercase mb-2 block">Tình trạng hôn nhân</label>
                         <select 
                             className="w-full p-3 bg-white rounded-lg border border-pink-200 font-bold text-sm outline-none text-pink-900"
-                            value={formData._marriageStatus || 'current'}
+                            value={formData._marriageStatus}
                             onChange={(e) => setFormData({...formData, _marriageStatus: e.target.value})}
                         >
                             <option value="current">Đang hôn thú</option>
@@ -341,16 +444,17 @@ const MemberForm: React.FC<MemberFormProps> = ({ member, allMembers, onSave, onC
             </div>
           </div>
 
+          {/* THÔNG TIN BỔ SUNG */}
           <div className="space-y-4">
             <h4 className="text-xs font-black text-blue-800 border-b-2 border-blue-100 pb-2 uppercase">Thông tin bổ sung</h4>
             <div className="grid grid-cols-1 gap-4">
               <div>
                 <label className="text-[10px] font-black text-stone-500 uppercase mb-1 block">{isAlive ? 'Nơi ở hiện tại' : 'Nơi an táng'}</label>
-                <input type="text" className="w-full p-3 bg-stone-50 rounded-xl border border-stone-200 outline-none focus:border-blue-500" value={formData.location || ''} onChange={(e) => setFormData({...formData, location: e.target.value})} />
+                <input type="text" className="w-full p-3 bg-stone-50 rounded-xl border border-stone-200 outline-none focus:border-blue-500" value={formData.location} onChange={(e) => setFormData({...formData, location: e.target.value})} />
               </div>
               <div>
                 <label className="text-[10px] font-black text-stone-500 uppercase mb-1 block">Tiểu sử chi tiết</label>
-                <textarea rows={3} className="w-full p-3 bg-stone-50 rounded-xl border border-stone-200 outline-none focus:border-blue-500 text-sm" placeholder="Ghi chú về cuộc đời, sự nghiệp, công trạng..." value={formData.biography || ''} onChange={(e) => setFormData({...formData, biography: e.target.value})}></textarea>
+                <textarea rows={3} className="w-full p-3 bg-stone-50 rounded-xl border border-stone-200 outline-none focus:border-blue-500 text-sm" placeholder="Ghi chú về cuộc đời, sự nghiệp, công trạng..." value={formData.biography} onChange={(e) => setFormData({...formData, biography: e.target.value})}></textarea>
               </div>
               <div>
                 <label className="text-[10px] font-black text-stone-500 uppercase mb-1 block">Ghi chú bổ sung</label>
@@ -358,22 +462,23 @@ const MemberForm: React.FC<MemberFormProps> = ({ member, allMembers, onSave, onC
                   rows={2} 
                   className="w-full p-3 bg-stone-50 rounded-xl border border-stone-200 outline-none focus:border-blue-500 text-sm" 
                   placeholder="Thông tin thông gia, số điện thoại, người tổ chức giỗ, ghi chú khác..." 
-                  value={formData.note || ''} 
-                  onChange={(e) => setFormData({...formData, note: e.target.value})}
+                  value={formData.notes} 
+                  onChange={(e) => setFormData({...formData, notes: e.target.value})}
                 ></textarea>
               </div>
             </div>
           </div>
         </div>
 
-        <div className="p-6 border-t bg-stone-50 rounded-b-[2rem] flex flex-col sm:flex-row gap-3">
+        {/* BÀN PHÍM CHỨC NĂNG */}
+        <div className="p-6 border-t bg-stone-50 rounded-b-[2rem] flex flex-col sm:flex-row gap-3 shrink-0">
           <button type="submit" className="flex-[2] py-4 bg-[#704214] text-white rounded-2xl font-black flex items-center justify-center gap-2 shadow-lg hover:bg-[#8a5219] transition-all text-sm uppercase tracking-wider">
             <Save size={20} /> {isNew ? 'THÊM VÀO GIA PHẢ' : 'LƯU THAY ĐỔI'}
           </button>
           
           {!isNew && onDelete && (
-            <button type="button" onClick={() => window.confirm("Xác nhận xóa vĩnh viễn thành viên này?") && onDelete(formData.id)} className="flex-1 py-4 text-red-600 bg-red-100 hover:bg-red-200 font-bold flex items-center justify-center gap-2 rounded-2xl transition-colors text-xs uppercase">
-              <Trash2 size={16} /> Xóa
+            <button type="button" onClick={() => onDelete(formData.id)} className="flex-1 py-4 text-red-600 bg-red-100 hover:bg-red-200 font-bold flex items-center justify-center gap-2 rounded-2xl transition-colors text-xs uppercase">
+              <Trash2 size={16} /> Chuyển vào Thùng rác
             </button>
           )}
         </div>

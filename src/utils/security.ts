@@ -1,45 +1,32 @@
-// src/utils/security.ts
+// src/utils/security.ts -- version 1.2 (Tương thích Cloudflare & AdminSetup)
 
 import CryptoJS from 'crypto-js';
 
 /**
- * TASK: Cơ chế Hashing PIN (SHA-256)
- * Dùng để kiểm tra xem mã PIN nhập vào có khớp với mã PIN trong config.json không
- * mà không cần lưu mã PIN gốc.
+ * Băm mã PIN 6 số bằng thuật toán SHA-256.
+ * Kết quả này được dùng để so khớp với pin_hash trong D1.
  */
 export const hashPIN = (pin: string): string => {
   return CryptoJS.SHA256(pin).toString();
 };
 
 /**
- * TASK: Cơ chế Giải mã PIN-to-Token (AES-256)
- * Giải mã chuỗi ciphertext từ config.json để lấy mã PAT thật.
- * @param encryptedToken Chuỗi token đã mã hóa từ config.json
- * @param pin Mã PIN 6 số người dùng nhập
- * @param salt Chuỗi muối bổ trợ để tăng cường bảo mật
+ * Mã hóa Token (PAT) bằng AES với mã PIN và Muối.
+ * Dùng cho công cụ AdminSetup.
  */
-export const decryptToken = (encryptedToken: string, pin: string, salt: string): string | null => {
-  try {
-    // Tạo khóa giải mã từ PIN và Salt
-    const key = hashPIN(pin + salt);
-    
-    // Thực hiện giải mã AES
-    const bytes = CryptoJS.AES.decrypt(encryptedToken, key);
-    const originalToken = bytes.toString(CryptoJS.enc.Utf8);
-    
-    // Nếu giải mã ra chuỗi rỗng hoặc lỗi, nghĩa là PIN sai
-    return originalToken || null;
-  } catch (error) {
-    console.error("Lỗi giải mã Token:", error);
-    return null;
-  }
+export const encryptToken = (token: string, pin: string, salt: string): string => {
+  return CryptoJS.AES.encrypt(token, pin + salt).toString();
 };
 
 /**
- * TASK: Công cụ dành cho Owner để tạo chuỗi mã hóa ban đầu
- * Bạn có thể dùng hàm này để tạo ra chuỗi encryptedToken dán vào config.json
+ * Giải mã Token (PAT).
  */
-export const encryptToken = (token: string, pin: string, salt: string): string => {
-  const key = hashPIN(pin + salt);
-  return CryptoJS.AES.encrypt(token, key).toString();
+export const decryptToken = (ciphertext: string, pin: string, salt: string): string | null => {
+  try {
+    const bytes = CryptoJS.AES.decrypt(ciphertext, pin + salt);
+    const originalText = bytes.toString(CryptoJS.enc.Utf8);
+    return originalText || null;
+  } catch (e) {
+    return null;
+  }
 };
