@@ -1,4 +1,4 @@
-// src/components/MemberForm.tsx -- version 3.6 (Dynamic Contextual Constraints)
+// src/components/MemberForm.tsx -- version 3.7 (Fixed Bidirectional Marriage Loop Bug)
 
 import React, { useState, useEffect, useRef, useMemo } from 'react';
 import { Save, X, Trash2, HelpCircle, UploadCloud, User, Loader2, AlertCircle, Info } from 'lucide-react';
@@ -46,17 +46,28 @@ const parseLunarDate = (dateStr?: string | null) => {
 
 const MemberForm: React.FC<MemberFormProps> = ({ member, allMembers, onSave, onCancel, onDelete, isNew, authorInfo }) => {
   
-  // --- LOGIC KHÓA KIỂU QUAN HỆ (V3.5 & V3.6) ---
+  // --- BẢN VÁ LỖI NGHIÊM TRỌNG V3.7: XỬ LÝ VÒNG LẶP QUAN HỆ 2 CHIỀU ---
   const CHILD_TYPES = ['biological', 'adopted', 'step'];
-  const foundSpouseTarget = allMembers.find(m => m.spouses?.some((s: any) => s.id === member.id));
   
-  // 1. Dấu hiệu chắc chắn là Dâu/Rể (Kể cả khi Đang Thêm Mới)
-  const isActuallyInLaw = !!foundSpouseTarget || !!member._bloodlineSpouseId || ['current', 'divorced', 'in_law'].includes(member.relation_status);
+  // 1. Đọc relation gốc từ dữ liệu truyền vào
+  const rawRelation = member.relation_status || member.relationType || 'biological';
+  const isOverriddenSpouse = ['current', 'divorced'].includes(rawRelation);
   
-  // 2. Dấu hiệu chắc chắn là Con (Kể cả khi Đang Thêm Mới)
-  const isActuallyChild = !isActuallyInLaw && (!!member.father_id || !!member.mother_id || CHILD_TYPES.includes(member.relation_status));
+  // 2. Xác định CHÍNH XÁC có phải Dâu/Rể không DỰA TRÊN relation của chính họ (hoặc cờ truyền vào từ Admin)
+  const isActuallyInLaw = !!member._bloodlineSpouseId || isOverriddenSpouse || rawRelation === 'in_law';
+  
+  // 3. CHỈ TÌM vợ/chồng trực hệ NẾU người này đã được xác nhận là Dâu/Rể.
+  // (Tuyệt đối không quét ngược lại khiến người trực hệ tự biến thành dâu/rể)
+  const foundSpouseTarget = isActuallyInLaw 
+    ? allMembers.find(m => 
+        m.spouses?.some((s: any) => s.id === member.id) && 
+        !['in_law', 'current', 'divorced'].includes(m.relation_status || m.relationType)
+      )
+    : null;
 
-  const initRelationStatus = isActuallyInLaw ? 'in_law' : (member.relation_status || member.relationType || 'biological');
+  const isActuallyChild = !isActuallyInLaw && (!!member.father_id || !!member.mother_id || CHILD_TYPES.includes(rawRelation));
+  
+  const initRelationStatus = isActuallyInLaw ? 'in_law' : (isOverriddenSpouse ? 'in_law' : rawRelation);
 
   // KHÓA TUYỆT ĐỐI (KHÔNG CẦN BIẾT LÀ THÊM MỚI HAY SỬA)
   const isLockedAsChild = isActuallyChild;
@@ -77,7 +88,9 @@ const MemberForm: React.FC<MemberFormProps> = ({ member, allMembers, onSave, onC
     avatar_url: member.avatar_url || null,
     rank_in_family: member.rank_in_family || member.siblingRank || 1,
     _bloodlineSpouseId: member._bloodlineSpouseId || foundSpouseTarget?.id || '',
-    _marriageStatus: member._marriageStatus || (foundSpouseTarget ? foundSpouseTarget.spouses.find((s:any)=>s.id === member.id)?.status : null) || (['current', 'divorced'].includes(member.relation_status) ? member.relation_status : 'current')
+    _marriageStatus: member._marriageStatus || 
+                     (foundSpouseTarget ? foundSpouseTarget.spouses.find((s:any)=>s.id === member.id)?.status : null) || 
+                     (isOverriddenSpouse ? rawRelation : 'current')
   });
 
   const [birth, setBirth] = useState({ ...parseDateString(member.birthday), isApproximate: member.is_birth_approximate === 1 });
@@ -350,7 +363,6 @@ const MemberForm: React.FC<MemberFormProps> = ({ member, allMembers, onSave, onC
                   </option>
                 </select>
                 
-                {/* HIỂN THỊ CẢNH BÁO TƯƠNG TÁC ĐỘNG TÙY THEO NGỮ CẢNH THÊM MỚI/SỬA */}
                 {isLockedAsChild && (
                   <p className={`text-[10px] mt-1 font-bold flex items-center gap-1 ${isNew ? 'text-blue-600' : 'text-red-500'}`}>
                     {isNew ? <Info size={12} /> : <AlertCircle size={12} />} 
