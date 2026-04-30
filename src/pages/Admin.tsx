@@ -661,7 +661,9 @@ export const Admin: React.FC<AdminProps> = ({
                             <p className="text-xs text-stone-600 leading-relaxed">
                                 <span className="font-black text-blue-800 uppercase text-[10px] tracking-tight">[{log.author_name}]</span> {log.action}: <span className="font-bold text-stone-800 italic">"{log.target_name}"</span>
                             </p>
-                            <p className="text-[9px] text-stone-400 mt-1 font-bold">{new Date(log.timestamp).toLocaleString()}</p>
+                            <p className="text-[9px] text-stone-400 mt-1 font-bold">
+                              {new Date((log.timestamp || '').replace(' ', 'T') + 'Z').toLocaleString('vi-VN', { timeZone: 'Asia/Ho_Chi_Minh' })}
+                            </p>
                         </div>
                     </div>
                     ))}

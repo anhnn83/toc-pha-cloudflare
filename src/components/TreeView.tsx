@@ -1,4 +1,4 @@
-// src/components/TreeView.tsx -- version 3.4 (Golden Highlight in Anniversary Modal)
+// src/components/TreeView.tsx -- version 3.5 (Golden Highlight & Red Countdown Reminder)
 
 import React, { useMemo, useRef, useState } from 'react';
 import { Tree, TreeNode } from 'react-organizational-chart';
@@ -20,10 +20,11 @@ const TreeView: React.FC<{ members: Member[] }> = ({ members }) => {
     [logic.selectedDetailId, members]
   );
 
-  // --- BẢN VÁ: Lấy ngày hôm nay dưới dạng DD/MM/YYYY để so sánh ---
-  const todayStr = useMemo(() => {
-    const today = new Date();
-    return `${String(today.getDate()).padStart(2, '0')}/${String(today.getMonth() + 1).padStart(2, '0')}/${today.getFullYear()}`;
+  // --- Chuẩn bị đối tượng Ngày hôm nay để so sánh ---
+  const todayObj = useMemo(() => {
+    const d = new Date();
+    d.setHours(0, 0, 0, 0); // Đưa về 00:00:00 để tính khoảng cách ngày chính xác
+    return d;
   }, []);
 
   const anniversaryList = useMemo(() => {
@@ -51,6 +52,7 @@ const TreeView: React.FC<{ members: Member[] }> = ({ members }) => {
         const solarDateStr = getNextSolarAnniversary(m.lunar_death_date);
         let solarTimestamp = Infinity;
         let dayOfWeekShort = ''; 
+        let daysLeft = -1; // Biến lưu số ngày đếm ngược
 
         if (solarDateStr) {
            const [dd, mm, yyyy] = solarDateStr.split('/');
@@ -59,6 +61,10 @@ const TreeView: React.FC<{ members: Member[] }> = ({ members }) => {
            
            const daysShort = ['CN', 'T2', 'T3', 'T4', 'T5', 'T6', 'T7'];
            dayOfWeekShort = daysShort[dateObj.getDay()];
+
+           // Tính khoảng cách ngày
+           const diffTime = solarTimestamp - todayObj.getTime();
+           daysLeft = Math.ceil(diffTime / (1000 * 60 * 60 * 24));
         }
         return {
           id: m.id,
@@ -67,7 +73,8 @@ const TreeView: React.FC<{ members: Member[] }> = ({ members }) => {
           lunarDate: m.lunar_death_date,
           solarDateStr,
           solarTimestamp,
-          dayOfWeekShort 
+          dayOfWeekShort,
+          daysLeft // Trả về daysLeft để render UI
         };
       })
       .filter(item => item.solarDateStr !== null);
@@ -75,7 +82,7 @@ const TreeView: React.FC<{ members: Member[] }> = ({ members }) => {
     list.sort((a, b) => a.solarTimestamp - b.solarTimestamp);
 
     return list;
-  }, [members, logic.rootMember, logic.collapsedIds, logic.focusId]);
+  }, [members, logic.rootMember, logic.collapsedIds, logic.focusId, todayObj]);
 
 
   const renderNode = (nodeId: string) => {
@@ -250,24 +257,48 @@ const TreeView: React.FC<{ members: Member[] }> = ({ members }) => {
                                 </thead>
                                 <tbody className="divide-y divide-stone-100 text-sm">
                                     {anniversaryList.map((item, index) => {
-                                        // BẢN VÁ: Kiểm tra xem dòng này có phải là ngày hôm nay không
-                                        const isToday = item.solarDateStr === todayStr;
+                                        // BẢN VÁ: Phân loại mốc thời gian
+                                        const isToday = item.daysLeft === 0;
+                                        const isComingSoon = item.daysLeft > 0 && item.daysLeft <= 7;
                                         
                                         return (
-                                          <tr key={item.id} className={`transition-all ${isToday ? 'bg-gradient-to-r from-yellow-50 to-amber-100 shadow-[inset_4px_0_0_0_#fbbf24]' : 'hover:bg-orange-50/30'}`}>
-                                              <td className={`p-3 text-center font-bold ${isToday ? 'text-amber-700' : 'text-stone-400'}`}>
+                                          <tr key={item.id} className={`transition-all ${
+                                            isToday ? 'bg-gradient-to-r from-yellow-50 to-amber-100 shadow-[inset_4px_0_0_0_#fbbf24]' : 
+                                            isComingSoon ? 'bg-rose-50/50 shadow-[inset_4px_0_0_0_#fda4af]' : 'hover:bg-orange-50/30'
+                                          }`}>
+                                              <td className={`p-3 text-center font-bold ${
+                                                isToday ? 'text-amber-700' : 
+                                                isComingSoon ? 'text-rose-400' : 'text-stone-400'
+                                              }`}>
                                                 {index + 1}
                                               </td>
-                                              <td className={`p-3 font-bold whitespace-nowrap ${isToday ? 'text-amber-900' : 'text-stone-800'}`}>
+                                              <td className={`p-3 font-bold whitespace-nowrap ${
+                                                isToday ? 'text-amber-900' : 
+                                                isComingSoon ? 'text-rose-900' : 'text-stone-800'
+                                              }`}>
                                                   {item.name}
-                                                  {item.alias && <span className={`${isToday ? 'text-amber-600' : 'text-stone-400'} font-normal italic ml-1`}>({item.alias})</span>}
+                                                  {item.alias && <span className={`${
+                                                    isToday ? 'text-amber-600' : 
+                                                    isComingSoon ? 'text-rose-500' : 'text-stone-400'
+                                                  } font-normal italic ml-1`}>({item.alias})</span>}
+                                                  
                                                   {isToday && <span className="ml-2 inline-flex items-center text-[8px] bg-amber-500 text-white px-2 py-0.5 rounded-full uppercase animate-pulse tracking-widest">Hôm nay</span>}
+                                                  {isComingSoon && <span className="ml-2 inline-flex items-center text-[8px] bg-rose-500 text-white px-2 py-0.5 rounded-full uppercase tracking-widest shadow-sm">Còn {item.daysLeft} ngày</span>}
                                               </td>
-                                              <td className={`p-3 text-center font-bold whitespace-nowrap ${isToday ? 'text-amber-700' : 'text-orange-700'}`}>
+                                              <td className={`p-3 text-center font-bold whitespace-nowrap ${
+                                                isToday ? 'text-amber-700' : 
+                                                isComingSoon ? 'text-rose-700' : 'text-orange-700'
+                                              }`}>
                                                 {item.lunarDate}
                                               </td>
-                                              <td className={`p-3 text-right font-black whitespace-nowrap ${isToday ? 'text-amber-800 bg-amber-200/50' : 'text-blue-700 bg-blue-50/20'}`}>
-                                                <span className={`${isToday ? 'text-amber-600' : 'text-blue-500/70'} font-bold mr-1`}>{item.dayOfWeekShort},</span>
+                                              <td className={`p-3 text-right font-black whitespace-nowrap ${
+                                                isToday ? 'text-amber-800 bg-amber-200/50' : 
+                                                isComingSoon ? 'text-rose-700 bg-rose-100/50' : 'text-blue-700 bg-blue-50/20'
+                                              }`}>
+                                                <span className={`${
+                                                  isToday ? 'text-amber-600' : 
+                                                  isComingSoon ? 'text-rose-500' : 'text-blue-500/70'
+                                                } font-bold mr-1`}>{item.dayOfWeekShort},</span>
                                                 {item.solarDateStr}
                                             </td>
                                           </tr>

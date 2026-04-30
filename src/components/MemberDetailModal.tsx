@@ -1,4 +1,4 @@
-// src/components/MemberDetailModal.tsx -- version 4.5 (Golden Highlight & Day of Week)
+// src/components/MemberDetailModal.tsx -- version 4.6 (Sync Red Countdown Reminder)
 
 import React, { useState, useMemo } from 'react';
 import { X, User, Calendar, MapPin, BookOpen, Quote, Users, Heart, HeartOff, Baby } from 'lucide-react';
@@ -24,7 +24,6 @@ const MemberDetailModal: React.FC<Props> = ({ member, members, onClose }) => {
 
   const nextSolarDate = useMemo(() => getNextSolarAnniversary(member.lunar_death_date), [member.lunar_death_date]);
 
-  // BẢN VÁ: Tính Thứ viết đầy đủ
   const nextSolarDayOfWeekFull = useMemo(() => {
     if (!nextSolarDate) return '';
     const [dd, mm, yyyy] = nextSolarDate.split('/');
@@ -33,13 +32,21 @@ const MemberDetailModal: React.FC<Props> = ({ member, members, onClose }) => {
     return daysFull[dateObj.getDay()];
   }, [nextSolarDate]);
 
-  // BẢN VÁ: Kiểm tra xem hôm nay có phải ngày giỗ không?
-  const isAnniversaryToday = useMemo(() => {
-    if (!nextSolarDate) return false;
-    const today = new Date();
-    const todayStr = `${String(today.getDate()).padStart(2, '0')}/${String(today.getMonth() + 1).padStart(2, '0')}/${today.getFullYear()}`;
-    return nextSolarDate === todayStr;
+  // Thuật toán đếm ngược số ngày còn lại
+  const daysLeft = useMemo(() => {
+    if (!nextSolarDate) return -1;
+    const [dd, mm, yyyy] = nextSolarDate.split('/');
+    const solarDate = new Date(parseInt(yyyy), parseInt(mm) - 1, parseInt(dd));
+    
+    const today = new Date(new Date().toLocaleString("en-US", { timeZone: "Asia/Ho_Chi_Minh" }));
+    today.setHours(0, 0, 0, 0); // Đưa về đầu ngày để so sánh chính xác
+    
+    const diffTime = solarDate.getTime() - today.getTime();
+    return Math.ceil(diffTime / (1000 * 60 * 60 * 24));
   }, [nextSolarDate]);
+
+  const isAnniversaryToday = daysLeft === 0;
+  const isComingSoon = daysLeft > 0 && daysLeft <= 7; // Trong vòng 7 ngày
 
   const father = members.find(m => m.id === member.father_id);
   const mother = members.find(m => m.id === member.mother_id);
@@ -106,19 +113,30 @@ const MemberDetailModal: React.FC<Props> = ({ member, members, onClose }) => {
                 
                 {member.lunar_death_date && (
                   <div className="flex flex-col sm:flex-row gap-3">
-                    {/* BẢN VÁ: THAY ĐỔI MÀU SẮC NGÀY GIỖ THÀNH VÀNG NẾU LÀ HÔM NAY */}
-                    <div className={`flex-1 p-4 rounded-2xl border text-center shadow-sm transition-all ${isAnniversaryToday ? 'bg-gradient-to-br from-yellow-50 to-amber-100 border-yellow-400 shadow-[0_0_15px_rgba(251,191,36,0.5)] ring-1 ring-yellow-400' : 'bg-orange-50 border-orange-100'}`}>
-                      <p className={`text-[10px] font-black uppercase tracking-widest ${isAnniversaryToday ? 'text-amber-600' : 'text-orange-600'}`}>Ngày Giỗ (Âm Lịch)</p>
-                      <p className={`text-2xl font-black mt-1 ${isAnniversaryToday ? 'text-amber-900' : 'text-orange-900'}`}>{member.lunar_death_date}</p>
+                    {/* KHỐI NGÀY ÂM LỊCH */}
+                    <div className={`flex-1 p-4 rounded-2xl border text-center shadow-sm transition-all ${
+                      isAnniversaryToday ? 'bg-gradient-to-br from-yellow-50 to-amber-100 border-yellow-400 shadow-[0_0_15px_rgba(251,191,36,0.5)] ring-1 ring-yellow-400' : 
+                      isComingSoon ? 'bg-rose-50 border-rose-200' : 'bg-orange-50 border-orange-100'
+                    }`}>
+                      <p className={`text-[10px] font-black uppercase tracking-widest ${isAnniversaryToday ? 'text-amber-600' : isComingSoon ? 'text-rose-600' : 'text-orange-600'}`}>Ngày Giỗ (Âm Lịch)</p>
+                      <p className={`text-2xl font-black mt-1 ${isAnniversaryToday ? 'text-amber-900' : isComingSoon ? 'text-rose-900' : 'text-orange-900'}`}>{member.lunar_death_date}</p>
                     </div>
+
+                    {/* KHỐI NGÀY DƯƠNG LỊCH */}
                     {nextSolarDate && (
-                      <div className={`flex-1 p-4 rounded-2xl border text-center shadow-sm relative overflow-hidden flex flex-col justify-center transition-all ${isAnniversaryToday ? 'bg-gradient-to-br from-yellow-50 to-amber-100 border-yellow-400 shadow-[0_0_15px_rgba(251,191,36,0.5)] ring-1 ring-yellow-400' : 'bg-blue-50 border-blue-100'}`}>
-                        <div className={`absolute top-0 right-0 text-white text-[8px] font-black px-2 py-0.5 rounded-bl-lg uppercase ${isAnniversaryToday ? 'bg-amber-500 animate-pulse' : 'bg-blue-500'}`}>
-                            {isAnniversaryToday ? 'Hôm nay' : 'Sắp tới'}
+                      <div className={`flex-1 p-4 rounded-2xl border text-center shadow-sm relative overflow-hidden flex flex-col justify-center transition-all ${
+                        isAnniversaryToday ? 'bg-gradient-to-br from-yellow-50 to-amber-100 border-yellow-400 shadow-[0_0_15px_rgba(251,191,36,0.5)] ring-1 ring-yellow-400' : 
+                        isComingSoon ? 'bg-rose-50 border-rose-200' : 'bg-blue-50 border-blue-100'
+                      }`}>
+                        <div className={`absolute top-0 right-0 text-white text-[8px] font-black px-2 py-0.5 rounded-bl-lg uppercase ${
+                          isAnniversaryToday ? 'bg-amber-500 animate-pulse' : 
+                          isComingSoon ? 'bg-rose-500 animate-pulse' : 'bg-blue-500'
+                        }`}>
+                          {isAnniversaryToday ? 'Hôm nay' : isComingSoon ? `Còn ${daysLeft} ngày` : 'Sắp tới'}
                         </div>
-                        <p className={`text-[10px] font-black uppercase tracking-widest ${isAnniversaryToday ? 'text-amber-600' : 'text-blue-600'}`}>Giỗ Dương Lịch {nextSolarDate.split('/')[2]}</p>
-                        <p className={`text-2xl font-black mt-1 ${isAnniversaryToday ? 'text-amber-900' : 'text-blue-900'}`}>{nextSolarDate.split('/').slice(0,2).join('/')}</p>
-                        <p className={`text-[11px] font-bold mt-1 uppercase tracking-widest ${isAnniversaryToday ? 'text-amber-700' : 'text-blue-700'}`}>{nextSolarDayOfWeekFull}</p>
+                        <p className={`text-[10px] font-black uppercase tracking-widest ${isAnniversaryToday ? 'text-amber-600' : isComingSoon ? 'text-rose-600' : 'text-blue-600'}`}>Giỗ Dương Lịch {nextSolarDate.split('/')[2]}</p>
+                        <p className={`text-2xl font-black mt-1 ${isAnniversaryToday ? 'text-amber-900' : isComingSoon ? 'text-rose-900' : 'text-blue-900'}`}>{nextSolarDate.split('/').slice(0,2).join('/')}</p>
+                        <p className={`text-[11px] font-bold mt-1 uppercase tracking-widest ${isAnniversaryToday ? 'text-amber-700' : isComingSoon ? 'text-rose-700' : 'text-blue-700'}`}>{nextSolarDayOfWeekFull}</p>
                       </div>
                     )}
                   </div>

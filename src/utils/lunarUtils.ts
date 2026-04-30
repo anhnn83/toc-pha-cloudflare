@@ -18,7 +18,7 @@ export const getNextSolarAnniversary = (lunarDateString: string | null | undefin
   // Ép tuyệt đối trị để đảm bảo luôn là tháng chính (lunar-javascript quy định tháng < 0 là nhuận)
   const month = Math.abs(parseInt(parts[1], 10)); 
   
-  const now = new Date();
+  const now = new Date(new Date().toLocaleString("en-US", { timeZone: "Asia/Ho_Chi_Minh" }));
   // Đưa giờ/phút/giây về 0 để so sánh chính xác theo ngày
   now.setHours(0, 0, 0, 0); 
   const currentYearSolar = now.getFullYear();
