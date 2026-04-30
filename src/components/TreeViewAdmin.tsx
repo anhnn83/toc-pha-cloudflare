@@ -1,6 +1,6 @@
-// src/components/TreeViewAdmin.tsx -- version 2.6 (Final - Heir Integration)
+// src/components/TreeViewAdmin.tsx -- version 2.7 (Auto-Focus for Mod)
 
-import React, { useMemo, useRef } from 'react';
+import React, { useMemo, useRef, useEffect } from 'react';
 import { Tree, TreeNode } from 'react-organizational-chart';
 import { TransformWrapper, TransformComponent } from 'react-zoom-pan-pinch';
 import type { ReactZoomPanPinchRef } from 'react-zoom-pan-pinch';
@@ -29,6 +29,21 @@ const TreeViewAdmin: React.FC<TreeViewAdminProps> = ({
     members.find(m => m.id === logic.selectedDetailId), 
     [logic.selectedDetailId, members]
   );
+
+  // --- BẢN VÁ: TỰ ĐỘNG TẬP TRUNG VÀO NHÁNH CỦA MOD KHI ĐĂNG NHẬP ---
+  const hasAutoFocused = useRef(false);
+
+  useEffect(() => {
+    // Nếu là Mod, có ID nhánh gốc, và chưa từng auto-focus lần nào
+    if (currentUserRole === 'mod' && allowedRootId && !hasAutoFocused.current) {
+      // Cho React 300ms để vẽ xong cây sơ đồ DOM, sau đó mới gọi lệnh focus
+      setTimeout(() => {
+        logic.handleFocus(allowedRootId);
+      }, 300);
+      hasAutoFocused.current = true; // Đánh dấu đã thực hiện, không ép auto-focus lại nữa
+    }
+  }, [currentUserRole, allowedRootId, logic]);
+  // -----------------------------------------------------------------
 
   // Thuật toán kiểm tra ranh giới quyền hạn (Dành cho Mod nhánh)
   const allowedIds = useMemo(() => {
