@@ -1,4 +1,4 @@
-// src/components/TreeView.tsx -- version 3.3
+// src/components/TreeView.tsx -- version 3.4 (Golden Highlight in Anniversary Modal)
 
 import React, { useMemo, useRef, useState } from 'react';
 import { Tree, TreeNode } from 'react-organizational-chart';
@@ -19,6 +19,12 @@ const TreeView: React.FC<{ members: Member[] }> = ({ members }) => {
     members.find(m => m.id === logic.selectedDetailId), 
     [logic.selectedDetailId, members]
   );
+
+  // --- BẢN VÁ: Lấy ngày hôm nay dưới dạng DD/MM/YYYY để so sánh ---
+  const todayStr = useMemo(() => {
+    const today = new Date();
+    return `${String(today.getDate()).padStart(2, '0')}/${String(today.getMonth() + 1).padStart(2, '0')}/${today.getFullYear()}`;
+  }, []);
 
   const anniversaryList = useMemo(() => {
     const getVisibleMemberIds = (rootId: string, acc: Set<string>) => {
@@ -44,14 +50,13 @@ const TreeView: React.FC<{ members: Member[] }> = ({ members }) => {
       .map(m => {
         const solarDateStr = getNextSolarAnniversary(m.lunar_death_date);
         let solarTimestamp = Infinity;
-        let dayOfWeekShort = ''; // <-- THÊM MỚI: Biến lưu Thứ viết tắt
+        let dayOfWeekShort = ''; 
 
         if (solarDateStr) {
            const [dd, mm, yyyy] = solarDateStr.split('/');
            const dateObj = new Date(parseInt(yyyy), parseInt(mm) - 1, parseInt(dd));
            solarTimestamp = dateObj.getTime();
            
-           // <-- THÊM MỚI: Mảng ánh xạ thứ trong tuần
            const daysShort = ['CN', 'T2', 'T3', 'T4', 'T5', 'T6', 'T7'];
            dayOfWeekShort = daysShort[dateObj.getDay()];
         }
@@ -62,7 +67,7 @@ const TreeView: React.FC<{ members: Member[] }> = ({ members }) => {
           lunarDate: m.lunar_death_date,
           solarDateStr,
           solarTimestamp,
-          dayOfWeekShort // <-- THÊM MỚI: Đẩy vào object kết quả
+          dayOfWeekShort 
         };
       })
       .filter(item => item.solarDateStr !== null);
@@ -230,9 +235,7 @@ const TreeView: React.FC<{ members: Member[] }> = ({ members }) => {
 
               <div className="flex-1 overflow-y-auto bg-white p-4 sm:p-6">
                  {anniversaryList.length > 0 ? (
-                    // --- BẢN VÁ: Responsive Table với thẻ bọc overflow-x-auto ---
                     <div className="border border-stone-200 rounded-2xl shadow-sm relative group bg-white">
-                        {/* Shadow giả mờ ở mép phải báo hiệu có thể lướt */}
                         <div className="absolute inset-y-0 right-0 w-8 bg-gradient-to-l from-white to-transparent opacity-100 sm:opacity-0 pointer-events-none z-10"></div>
                         
                         <div className="w-full overflow-x-auto custom-scrollbar pb-1">
@@ -246,20 +249,30 @@ const TreeView: React.FC<{ members: Member[] }> = ({ members }) => {
                                     </tr>
                                 </thead>
                                 <tbody className="divide-y divide-stone-100 text-sm">
-                                    {anniversaryList.map((item, index) => (
-                                        <tr key={item.id} className="hover:bg-orange-50/30 transition-colors">
-                                            <td className="p-3 text-center text-stone-400 font-bold">{index + 1}</td>
-                                            <td className="p-3 font-bold text-stone-800 whitespace-nowrap">
-                                                {item.name}
-                                                {item.alias && <span className="text-stone-400 font-normal italic ml-1">({item.alias})</span>}
+                                    {anniversaryList.map((item, index) => {
+                                        // BẢN VÁ: Kiểm tra xem dòng này có phải là ngày hôm nay không
+                                        const isToday = item.solarDateStr === todayStr;
+                                        
+                                        return (
+                                          <tr key={item.id} className={`transition-all ${isToday ? 'bg-gradient-to-r from-yellow-50 to-amber-100 shadow-[inset_4px_0_0_0_#fbbf24]' : 'hover:bg-orange-50/30'}`}>
+                                              <td className={`p-3 text-center font-bold ${isToday ? 'text-amber-700' : 'text-stone-400'}`}>
+                                                {index + 1}
+                                              </td>
+                                              <td className={`p-3 font-bold whitespace-nowrap ${isToday ? 'text-amber-900' : 'text-stone-800'}`}>
+                                                  {item.name}
+                                                  {item.alias && <span className={`${isToday ? 'text-amber-600' : 'text-stone-400'} font-normal italic ml-1`}>({item.alias})</span>}
+                                                  {isToday && <span className="ml-2 inline-flex items-center text-[8px] bg-amber-500 text-white px-2 py-0.5 rounded-full uppercase animate-pulse tracking-widest">Hôm nay</span>}
+                                              </td>
+                                              <td className={`p-3 text-center font-bold whitespace-nowrap ${isToday ? 'text-amber-700' : 'text-orange-700'}`}>
+                                                {item.lunarDate}
+                                              </td>
+                                              <td className={`p-3 text-right font-black whitespace-nowrap ${isToday ? 'text-amber-800 bg-amber-200/50' : 'text-blue-700 bg-blue-50/20'}`}>
+                                                <span className={`${isToday ? 'text-amber-600' : 'text-blue-500/70'} font-bold mr-1`}>{item.dayOfWeekShort},</span>
+                                                {item.solarDateStr}
                                             </td>
-                                            <td className="p-3 text-center font-bold text-orange-700 whitespace-nowrap">{item.lunarDate}</td>
-                                            <td className="p-3 text-right font-black text-blue-700 bg-blue-50/20 whitespace-nowrap">
-                                              <span className="text-blue-500/70 font-bold mr-1">{item.dayOfWeekShort},</span>
-                                              {item.solarDateStr}
-                                          </td>
-                                        </tr>
-                                    ))}
+                                          </tr>
+                                        );
+                                    })}
                                 </tbody>
                             </table>
                         </div>

@@ -1,49 +1,30 @@
-// src/components/MemberDetailModal.tsx -- version 4.4 (Specific Relation UI)
+// src/components/MemberDetailModal.tsx -- version 4.5 (Golden Highlight & Day of Week)
 
 import React, { useState, useMemo } from 'react';
 import { X, User, Calendar, MapPin, BookOpen, Quote, Users, Heart, HeartOff, Baby } from 'lucide-react';
 import { getNextSolarAnniversary } from '../utils/lunarUtils';
 
 interface Member {
-  id: string; 
-  full_name: string; 
-  alias?: string; 
-  gender: 'M' | 'F';
+  id: string; full_name: string; alias?: string; gender: 'M' | 'F';
   relation_status: 'biological' | 'adopted' | 'in_law' | 'step';
-  is_alive: number; 
-  father_id?: string | null; 
-  mother_id?: string | null;
+  is_alive: number; father_id?: string | null; mother_id?: string | null;
   spouses?: { id: string; status: 'current' | 'divorced' | 'widowed' }[];
-  birthday?: string | null; 
-  is_birth_approximate?: number;
-  death_date?: string | null; 
-  is_death_approximate?: number;
-  lunar_death_date?: string | null; // Cột dữ liệu mới lưu ngày giỗ Âm lịch (DD/MM)
-  location?: string;
-  biography?: string;
-  notes?: string;
-  avatar_url?: string | null;
+  birthday?: string | null; is_birth_approximate?: number;
+  death_date?: string | null; is_death_approximate?: number;
+  lunar_death_date?: string | null; location?: string;
+  biography?: string; notes?: string; avatar_url?: string | null;
 }
 
-interface Props { 
-  member: Member; 
-  members: Member[]; 
-  onClose: () => void; 
-}
+interface Props { member: Member; members: Member[]; onClose: () => void; }
 
 const MemberDetailModal: React.FC<Props> = ({ member, members, onClose }) => {
   const [showFullImage, setShowFullImage] = useState(false);
 
-  // 1. Xử lý ảnh hiển thị (Ưu tiên Cache Local > R2 URL)
-  const displayAvatar = useMemo(() => {
-    return member.avatar_url;
-  }, [member.avatar_url]);
+  const displayAvatar = useMemo(() => member.avatar_url, [member.avatar_url]);
 
-  // 2. Tự động tính toán ngày giỗ Dương lịch sắp tới từ Ngày giỗ Âm lịch
-  const nextSolarDate = useMemo(() => {
-    return getNextSolarAnniversary(member.lunar_death_date);
-  }, [member.lunar_death_date]);
+  const nextSolarDate = useMemo(() => getNextSolarAnniversary(member.lunar_death_date), [member.lunar_death_date]);
 
+  // BẢN VÁ: Tính Thứ viết đầy đủ
   const nextSolarDayOfWeekFull = useMemo(() => {
     if (!nextSolarDate) return '';
     const [dd, mm, yyyy] = nextSolarDate.split('/');
@@ -52,7 +33,14 @@ const MemberDetailModal: React.FC<Props> = ({ member, members, onClose }) => {
     return daysFull[dateObj.getDay()];
   }, [nextSolarDate]);
 
-  // 3. Truy xuất thông tin gia đình
+  // BẢN VÁ: Kiểm tra xem hôm nay có phải ngày giỗ không?
+  const isAnniversaryToday = useMemo(() => {
+    if (!nextSolarDate) return false;
+    const today = new Date();
+    const todayStr = `${String(today.getDate()).padStart(2, '0')}/${String(today.getMonth() + 1).padStart(2, '0')}/${today.getFullYear()}`;
+    return nextSolarDate === todayStr;
+  }, [nextSolarDate]);
+
   const father = members.find(m => m.id === member.father_id);
   const mother = members.find(m => m.id === member.mother_id);
   const siblings = members.filter(m => m.id !== member.id && ((member.father_id && m.father_id === member.father_id) || (member.mother_id && m.mother_id === member.mother_id)));
@@ -64,27 +52,14 @@ const MemberDetailModal: React.FC<Props> = ({ member, members, onClose }) => {
   });
 
   const renderSpouseLabel = (spouseGender: string, status: string) => {
-    const title = spouseGender === 'F' ? 'Vợ' : 'Chồng';
     const isActive = status === 'current';
-
-    const icon = isActive
-      ? <Heart size={14} className="text-rose-500 fill-rose-500 shrink-0" />
-      : <HeartOff size={14} className="text-stone-400 shrink-0" />;
-
-    return (
-      <span className="flex items-center gap-1.5">
-        {icon}
-        <span>{title}:</span>
-      </span>
-    );
+    const icon = isActive ? <Heart size={14} className="text-rose-500 fill-rose-500 shrink-0" /> : <HeartOff size={14} className="text-stone-400 shrink-0" />;
+    return <span className="flex items-center gap-1.5">{icon}<span>{spouseGender === 'F' ? 'Vợ' : 'Chồng'}:</span></span>;
   };
 
-  // 4. Logic xác định nhãn hiển thị cho Quan hệ dòng tộc
   const relationDisplay = useMemo(() => {
     if (member.relation_status === 'biological') return '🧬 Con ruột';
-    if (member.relation_status === 'in_law') {
-      return member.gender === 'F' ? '👧 Dâu' : '👦 Rể';
-    }
+    if (member.relation_status === 'in_law') return member.gender === 'F' ? '👧 Dâu' : '👦 Rể';
     if (member.relation_status === 'adopted') return '👨‍👧 Con nuôi';
     if (member.relation_status === 'step') return '🩸 Con riêng';
     return 'Không rõ';
@@ -94,7 +69,6 @@ const MemberDetailModal: React.FC<Props> = ({ member, members, onClose }) => {
     <div className="fixed inset-0 z-[100] flex items-center justify-center p-4 bg-black/70 backdrop-blur-md animate-in fade-in">
       <div className="bg-white w-full max-w-xl rounded-3xl shadow-2xl overflow-hidden flex flex-col max-h-[92vh] relative">
         
-        {/* HEADER */}
         <div className={`p-6 text-white flex justify-between items-start ${member.gender === 'M' ? 'bg-blue-800' : 'bg-pink-800'}`}>
           <div>
             <h2 className="text-2xl font-black tracking-tight">{member.full_name.toUpperCase()}</h2>
@@ -130,19 +104,21 @@ const MemberDetailModal: React.FC<Props> = ({ member, members, onClose }) => {
               <div className="space-y-4 pt-2">
                 <div className="flex items-center gap-3"><Calendar size={20} className="text-stone-400" /> <span className="text-sm font-semibold text-stone-700">Ngày mất Dương lịch: {member.death_date || "Không rõ"}</span></div>
                 
-                {/* KHỐI HIỂN THỊ NGÀY GIỖ THÔNG MINH */}
                 {member.lunar_death_date && (
                   <div className="flex flex-col sm:flex-row gap-3">
-                    <div className="flex-1 p-4 bg-orange-50 rounded-2xl border border-orange-100 text-center shadow-sm">
-                      <p className="text-[10px] text-orange-600 font-black uppercase tracking-widest">Ngày Giỗ (Âm Lịch)</p>
-                      <p className="text-2xl font-black text-orange-900 mt-1">{member.lunar_death_date}</p>
+                    {/* BẢN VÁ: THAY ĐỔI MÀU SẮC NGÀY GIỖ THÀNH VÀNG NẾU LÀ HÔM NAY */}
+                    <div className={`flex-1 p-4 rounded-2xl border text-center shadow-sm transition-all ${isAnniversaryToday ? 'bg-gradient-to-br from-yellow-50 to-amber-100 border-yellow-400 shadow-[0_0_15px_rgba(251,191,36,0.5)] ring-1 ring-yellow-400' : 'bg-orange-50 border-orange-100'}`}>
+                      <p className={`text-[10px] font-black uppercase tracking-widest ${isAnniversaryToday ? 'text-amber-600' : 'text-orange-600'}`}>Ngày Giỗ (Âm Lịch)</p>
+                      <p className={`text-2xl font-black mt-1 ${isAnniversaryToday ? 'text-amber-900' : 'text-orange-900'}`}>{member.lunar_death_date}</p>
                     </div>
                     {nextSolarDate && (
-                      <div className="flex-1 p-4 bg-blue-50 rounded-2xl border border-blue-100 text-center shadow-sm relative overflow-hidden flex flex-col justify-center">
-                        <div className="absolute top-0 right-0 bg-blue-500 text-white text-[8px] font-black px-2 py-0.5 rounded-bl-lg uppercase">Sắp tới</div>
-                        <p className="text-[10px] text-blue-600 font-black uppercase tracking-widest">Giỗ Dương Lịch {nextSolarDate.split('/')[2]}</p>
-                        <p className="text-2xl font-black text-blue-900 mt-1">{nextSolarDate.split('/').slice(0,2).join('/')}</p>
-                        <p className="text-[11px] font-bold text-blue-700 mt-1 uppercase tracking-widest">{nextSolarDayOfWeekFull}</p>
+                      <div className={`flex-1 p-4 rounded-2xl border text-center shadow-sm relative overflow-hidden flex flex-col justify-center transition-all ${isAnniversaryToday ? 'bg-gradient-to-br from-yellow-50 to-amber-100 border-yellow-400 shadow-[0_0_15px_rgba(251,191,36,0.5)] ring-1 ring-yellow-400' : 'bg-blue-50 border-blue-100'}`}>
+                        <div className={`absolute top-0 right-0 text-white text-[8px] font-black px-2 py-0.5 rounded-bl-lg uppercase ${isAnniversaryToday ? 'bg-amber-500 animate-pulse' : 'bg-blue-500'}`}>
+                            {isAnniversaryToday ? 'Hôm nay' : 'Sắp tới'}
+                        </div>
+                        <p className={`text-[10px] font-black uppercase tracking-widest ${isAnniversaryToday ? 'text-amber-600' : 'text-blue-600'}`}>Giỗ Dương Lịch {nextSolarDate.split('/')[2]}</p>
+                        <p className={`text-2xl font-black mt-1 ${isAnniversaryToday ? 'text-amber-900' : 'text-blue-900'}`}>{nextSolarDate.split('/').slice(0,2).join('/')}</p>
+                        <p className={`text-[11px] font-bold mt-1 uppercase tracking-widest ${isAnniversaryToday ? 'text-amber-700' : 'text-blue-700'}`}>{nextSolarDayOfWeekFull}</p>
                       </div>
                     )}
                   </div>
@@ -158,7 +134,6 @@ const MemberDetailModal: React.FC<Props> = ({ member, members, onClose }) => {
             </div>
           )}
 
-          {/* THÔNG TIN GIA ĐÌNH */}
           {member.relation_status !== 'in_law' && (father || mother) && (
             <div className="space-y-2 pt-4 border-t border-stone-100">
               <p className="text-[10px] text-stone-400 uppercase font-black">Thông tin cha mẹ</p>

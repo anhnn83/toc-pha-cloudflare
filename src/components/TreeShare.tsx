@@ -1,8 +1,9 @@
-// src/components/TreeShare.tsx -- version 3.7 (Two-line Name & Alias Layout, Kept all v3.6 Logic)
+// src/components/TreeShare.tsx -- version 3.8 (Golden Anniversary Highlight & 2-Line Name)
 
 import React, { useMemo, useState } from 'react';
 import { User, Target } from 'lucide-react';
 import type { ReactZoomPanPinchRef } from 'react-zoom-pan-pinch';
+import { getNextSolarAnniversary } from '../utils/lunarUtils';
 
 export interface DateInfo { dd: number | null; mm: number | null; yyyy: number | null; isApproximate?: boolean; displayText?: string; }
 export interface Member {
@@ -12,26 +13,19 @@ export interface Member {
   parents?: { fatherId: string | null; motherId: string | null };
   spouses?: { id: string; status: 'current' | 'divorced' | 'widowed'; type: 'primary' | 'secondary' | number }[];
   birth?: DateInfo; death?: DateInfo; avatarUrl?: string; siblingRank?: number;
-  // Cho phép nhận dữ liệu snake_case từ backend D1
   [key: string]: any; 
 }
 
-// Hàm trích xuất năm từ chuỗi ngày (YYYY-MM-DD hoặc DD/MM/YYYY)
 const extractYear = (dateStr?: string) => {
   if (!dateStr) return null;
   const parts = dateStr.split(/[-/]/);
   return parts.length === 3 ? parseInt(parts[2]) : parseInt(parts[0]);
 };
 
-// Hàm cắt ngắn tên lũy tiến (Sẽ không truyền nickname vào đây nữa để lấy đúng TÊN)
 export const formatDisplayName = (fullName: string, nickname?: string) => {
   if (!fullName) return nickname ? `(${nickname})` : "Ẩn danh";
-
   const words = fullName.trim().split(/\s+/);
-  const nickPart = nickname 
-    ? ` (${nickname.trim().toLowerCase().split(/\s+/).map(w => w.charAt(0).toUpperCase() + w.slice(1)).join(' ')})` 
-    : '';
-
+  const nickPart = nickname ? ` (${nickname.trim().toLowerCase().split(/\s+/).map(w => w.charAt(0).toUpperCase() + w.slice(1)).join(' ')})` : '';
   if (words.length <= 1) return `${fullName.toUpperCase()}${nickPart}`;
 
   const first = words[0];
@@ -53,7 +47,6 @@ export const formatDisplayName = (fullName: string, nickname?: string) => {
       namePart = buildNamePart(currentMiddle);
     } else { break; }
   }
-
   return `${namePart.toUpperCase()}${nickPart}`;
 };
 
@@ -64,16 +57,10 @@ export const getShortName = (fullName: string) => {
 };
 
 interface BaseCardProps {
-  person: Member;
-  members: Member[];
-  isSpouse?: boolean;
-  bloodlineName?: string;
-  isAllowed?: boolean;
-  dichTonGen?: number | null;
-  onShowDetail?: (id: string) => void;
-  onFocus?: (id: string) => void;
-  renderExtraButtons?: React.ReactNode;
-  renderCollapseButton?: React.ReactNode;
+  person: Member; members: Member[]; isSpouse?: boolean; bloodlineName?: string;
+  isAllowed?: boolean; dichTonGen?: number | null;
+  onShowDetail?: (id: string) => void; onFocus?: (id: string) => void;
+  renderExtraButtons?: React.ReactNode; renderCollapseButton?: React.ReactNode;
 }
 
 export const MemberCardBase: React.FC<BaseCardProps> = ({ 
@@ -81,7 +68,6 @@ export const MemberCardBase: React.FC<BaseCardProps> = ({
   onShowDetail, onFocus, renderExtraButtons, renderCollapseButton 
 }) => {
   
-  // CHUẨN HÓA DỮ LIỆU: Ánh xạ snake_case (D1 DB) sang camelCase (React UI)
   const person = useMemo(() => ({
     ...rawPerson,
     fullName: rawPerson.fullName || rawPerson.full_name || '',
@@ -90,10 +76,8 @@ export const MemberCardBase: React.FC<BaseCardProps> = ({
     lifeStatus: rawPerson.lifeStatus || (rawPerson.is_alive === 0 ? 'deceased' : 'alive'),
     relationType: rawPerson.relationType || rawPerson.relation_status,
     gender: rawPerson.gender || 'M',
-    parents: rawPerson.parents || { 
-      fatherId: rawPerson.father_id, 
-      motherId: rawPerson.mother_id 
-    },
+    lunar_death_date: rawPerson.lunar_death_date || rawPerson.lunarDeathDate, // Trích xuất thêm ngày giỗ
+    parents: rawPerson.parents || { fatherId: rawPerson.father_id, motherId: rawPerson.mother_id },
     birth: rawPerson.birth || { yyyy: extractYear(rawPerson.birthday) },
     death: rawPerson.death || { yyyy: extractYear(rawPerson.death_date) },
   }), [rawPerson]);
@@ -108,84 +92,67 @@ export const MemberCardBase: React.FC<BaseCardProps> = ({
 
   const parentLabel = useMemo(() => {
     if (isSpouse) return person.gender === 'F' ? `👰🏻‍♀️Vợ ông ${bloodlineName}` : `🤵🏻Chồng bà ${bloodlineName}`;
-    
-    const fatherId = person.parents?.fatherId;
-    const motherId = person.parents?.motherId;
-    
-    const fatherRaw = members.find(m => m.id === fatherId);
-    const motherRaw = members.find(m => m.id === motherId);
-    
+    const fatherRaw = members.find(m => m.id === person.parents?.fatherId);
+    const motherRaw = members.find(m => m.id === person.parents?.motherId);
     const fatherName = fatherRaw ? (fatherRaw.fullName || fatherRaw.full_name) : null;
     const motherName = motherRaw ? (motherRaw.fullName || motherRaw.full_name) : null;
-
     let indicator = (person.relationType === 'biological' || person.relationType === 'step') ? '🩸' : '👨‍👧';
-    let text = '';
     
-    if (fatherName && motherName) text = `Con ông ${getShortName(fatherName)} & bà ${getShortName(motherName)}`;
-    else if (fatherName) text = `Con ông ${getShortName(fatherName)}`;
-    else if (motherName) text = `Con bà ${getShortName(motherName)}`;
-    else return null;
-    
-    return `${indicator}${text}`;
+    if (fatherName && motherName) return `${indicator}Con ông ${getShortName(fatherName)} & bà ${getShortName(motherName)}`;
+    if (fatherName) return `${indicator}Con ông ${getShortName(fatherName)}`;
+    if (motherName) return `${indicator}Con bà ${getShortName(motherName)}`;
+    return null;
   }, [person, members, isSpouse, bloodlineName]);
 
-  // Format biệt danh viết hoa chữ cái đầu cho đồng bộ
-  const formattedNick = person.nickname 
-    ? person.nickname.trim().toLowerCase().split(/\s+/).map((w: string) => w.charAt(0).toUpperCase() + w.slice(1)).join(' ') 
-    : '';
+  const formattedNick = person.nickname ? person.nickname.trim().toLowerCase().split(/\s+/).map((w: string) => w.charAt(0).toUpperCase() + w.slice(1)).join(' ') : '';
+
+  // BẢN VÁ: KIỂM TRA HÔM NAY CÓ PHẢI LÀ NGÀY GIỖ KHÔNG?
+  const isAnniversaryToday = useMemo(() => {
+    if (person.lifeStatus !== 'deceased' || !person.lunar_death_date) return false;
+    const nextSolar = getNextSolarAnniversary(person.lunar_death_date);
+    if (!nextSolar) return false;
+    const today = new Date();
+    const todayStr = `${String(today.getDate()).padStart(2, '0')}/${String(today.getMonth() + 1).padStart(2, '0')}/${today.getFullYear()}`;
+    return nextSolar === todayStr;
+  }, [person]);
 
  return (
     <div 
       id={person.id} 
-      className={`flex flex-col w-[200px] bg-white rounded-lg shadow-xl border border-stone-200 overflow-hidden text-center transition-all select-none relative ${!isAllowed ? 'opacity-40 grayscale-[50%]' : ''}
-        ${renderExtraButtons ? 'min-h-[285px]' : 'min-h-[240px]'} 
+      // NẾU LÀ NGÀY GIỖ: Đổi thẻ thành màu Vàng Óng phát sáng
+      className={`flex flex-col w-[200px] rounded-lg shadow-xl overflow-hidden text-center transition-all select-none relative ${!isAllowed ? 'opacity-40 grayscale-[50%]' : ''} ${renderExtraButtons ? 'min-h-[285px]' : 'min-h-[240px]'}
+        ${isAnniversaryToday ? 'bg-gradient-to-b from-yellow-50 to-amber-100 border-2 border-yellow-400 shadow-[0_0_20px_rgba(251,191,36,0.6)] ring-1 ring-yellow-300' : 'bg-white border border-stone-200'}
       `}
     >
-      <div className={`py-1.5 px-2 text-[10px] flex justify-between items-center font-bold ${person.gender === 'M' ? 'bg-blue-800 text-white' : 'bg-pink-800 text-white'}`}>
+      <div className={`py-1.5 px-2 text-[10px] flex justify-between items-center font-bold ${isAnniversaryToday ? 'bg-amber-600 text-white' : person.gender === 'M' ? 'bg-blue-800 text-white' : 'bg-pink-800 text-white'}`}>
         <span className="shrink-0 flex items-center gap-0.5">
           {icon}
-          {dichTonGen !== undefined && dichTonGen !== null && (
-            <span className="text-yellow-400 font-black animate-pulse" title={`Đích tôn đời ${dichTonGen}`}>
-              ({dichTonGen})
-            </span>
-          )}
+          {dichTonGen !== undefined && dichTonGen !== null && <span className="text-yellow-400 font-black animate-pulse" title={`Đích tôn đời ${dichTonGen}`}>({dichTonGen})</span>}
         </span>
         <span className="truncate ml-1 flex-1 text-right tracking-tight">{parentLabel}</span>
       </div>
 
-      {/* --- BẢN VÁ: HÀNG 1 (TÊN) VÀ HÀNG 2 (BIỆT DANH) --- */}
-      <div className="py-2 px-2 border-b border-stone-100 bg-white flex flex-col items-center justify-center min-h-[55px] w-full overflow-hidden">
-        {/* Hàng 1: Tên viết tắt lũy tiến */}
-        <h4 className="text-[12px] font-black text-stone-800 leading-tight truncate w-full" title={person.fullName}>
+      <div className={`py-2 px-2 border-b flex flex-col items-center justify-center min-h-[55px] w-full overflow-hidden ${isAnniversaryToday ? 'border-yellow-200/50' : 'bg-white border-stone-100'}`}>
+        <h4 className={`text-[12px] font-black leading-tight truncate w-full ${isAnniversaryToday ? 'text-amber-900' : 'text-stone-800'}`} title={person.fullName}>
           {formatDisplayName(person.fullName)}
         </h4>
-        {/* Hàng 2: Biệt danh (Cắt ngắn có dấu ... nhờ truncate) */}
-        {formattedNick && (
-          <div className="text-[10px] text-stone-500 font-bold italic truncate w-full mt-0.5" title={person.nickname}>
-            {formattedNick}
-          </div>
-        )}
+        {formattedNick && <div className={`text-[10px] font-bold italic truncate w-full mt-0.5 ${isAnniversaryToday ? 'text-amber-700' : 'text-stone-500'}`} title={person.nickname}>{formattedNick}</div>}
       </div>
 
-      <div className="py-3 flex justify-center bg-stone-50/50 relative">
-        <div 
-          onClick={() => onShowDetail?.(person.id)}
-          className={`relative w-[70px] h-[70px] rounded-full border-4 border-white shadow-lg overflow-hidden flex items-center justify-center bg-stone-200 cursor-pointer hover:scale-110 transition-transform ${person.relationType === 'adopted' ? 'border-dashed border-stone-400' : ''}`}
-        >
+      <div className={`py-3 flex justify-center relative ${isAnniversaryToday ? '' : 'bg-stone-50/50'}`}>
+        <div onClick={() => onShowDetail?.(person.id)} className={`relative w-[70px] h-[70px] rounded-full border-4 border-white shadow-lg overflow-hidden flex items-center justify-center bg-stone-200 cursor-pointer hover:scale-110 transition-transform ${person.relationType === 'adopted' ? 'border-dashed border-stone-400' : ''}`}>
           {displayAvatar && <img src={displayAvatar} className="w-full h-full object-cover absolute inset-0 z-10" onError={(e) => e.currentTarget.style.display = 'none'} />}
           <User size={36} className="text-stone-400 absolute z-0" />
         </div>
       </div>
 
-      <div className="py-2.5 bg-white border-t border-stone-100 flex flex-col items-center gap-2">
-        <p className="text-[10px] font-bold text-stone-600 flex justify-center items-center gap-1">
+      <div className={`py-2.5 flex flex-col items-center gap-2 border-t ${isAnniversaryToday ? 'border-yellow-200/50' : 'bg-white border-stone-100'}`}>
+        <p className={`text-[10px] font-bold flex justify-center items-center gap-1 ${isAnniversaryToday ? 'text-amber-800' : 'text-stone-600'}`}>
           {person.lifeStatus === 'deceased' ? <>𓉸Năm mất: {person.death?.yyyy || '????'}</> : <><span className="text-green-600">⛥</span>Năm sinh: {person.birth?.yyyy || '????'}</>}
         </p>
         <div className="flex gap-2 pb-1">
           {renderCollapseButton}
-          {!isSpouse && (
-            <button onClick={(e) => { e.stopPropagation(); onFocus?.(person.id); }} className="bg-stone-50 rounded-full text-blue-600 hover:scale-110 transition-transform shadow-sm p-1 border border-stone-100"><Target size={14} /></button>
-          )}
+          {!isSpouse && <button onClick={(e) => { e.stopPropagation(); onFocus?.(person.id); }} className={`rounded-full hover:scale-110 transition-transform shadow-sm p-1 border ${isAnniversaryToday ? 'bg-amber-100 text-amber-600 border-amber-200' : 'bg-stone-50 text-blue-600 border-stone-100'}`}><Target size={14} /></button>}
         </div>
       </div>
       <div className="mt-auto">{renderExtraButtons}</div>
@@ -233,9 +200,7 @@ export const useTreeCommonLogic = (members: Member[], transformRef: React.RefObj
 
   const handleFocus = (id: string) => {
     setFocusId(id);
-    setTimeout(() => {
-      transformRef.current?.centerView(0.6, 600);
-    }, 150);
+    setTimeout(() => { transformRef.current?.centerView(0.6, 600); }, 150);
   };
 
   const rootMember = useMemo(() => {
@@ -248,7 +213,6 @@ export const useTreeCommonLogic = (members: Member[], transformRef: React.RefObj
     }) || members[0];
   }, [members, focusId]);
 
-  // THUẬT TOÁN TÌM DÒNG ĐÍCH TÔN ĐÃ FIX LỖI (Nguyên tắc 1 & 2)
   const dichTonMap = useMemo(() => {
     const map: Record<string, number> = {};
     if (!rootMember || rootMember.gender !== 'M') return map;
@@ -274,7 +238,7 @@ export const useTreeCommonLogic = (members: Member[], transformRef: React.RefObj
       const mId = member.parents?.motherId || member.mother_id;
       const parentId = fId || mId;
 
-      if (!parentId) return null; 
+      if (!parentId) return null;
 
       const allBrothers = members.filter(m => {
         const mFId = m.parents?.fatherId || (m as any).father_id;
