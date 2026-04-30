@@ -1,4 +1,4 @@
-// src/components/About.tsx -- Version 2.0 (Cloudflare D1 & R2 Synchronization)
+// src/components/About.tsx -- Version 2.1 (Fixed Mobile Overflow UI)
 
 import React, { useState } from 'react';
 import { 
@@ -108,24 +108,24 @@ const About: React.FC<AboutProps> = ({ aboutFamily, familyPhotos = [] }) => {
           <div className="bg-white p-6 rounded-2xl border border-stone-100 shadow-sm space-y-5 text-sm text-stone-600">
             <div className="flex gap-4 items-start">
               <div className="p-2 bg-blue-50 rounded-lg text-blue-600 shrink-0"><ShieldCheck size={20}/></div>
-              <div>
-                <p className="font-black text-blue-800 uppercase text-[10px] mb-1">Quyền uy Trưởng tộc (SM)</p>
-                {/* <p className="text-xs">Quản trị toàn bộ dữ liệu, thiết lập bảo mật toàn cục, tạo & quản lý danh sách Mod, sao lưu/khôi phục hệ thống...</p> */}
-                <p className="text-xs flex items-center gap-1 whitespace-nowrap">
-                  <Database size={12} className="shrink-0" /> 
-                  <span><b>Cây gia phả</b> - Thêm/xóa/chỉnh sửa thành viên, ⚡Phân quyền quản trị nhánh chi họ.</span>
+              <div className="space-y-2">
+                <p className="font-black text-blue-800 uppercase text-[10px] mb-2">Quyền uy Trưởng tộc (SM)</p>
+                {/* BẢN VÁ: Loại bỏ whitespace-nowrap, căn chỉnh items-start, thêm màu sắc chuyên nghiệp */}
+                <p className="text-[11px] sm:text-xs flex items-start gap-2 text-stone-600 leading-relaxed">
+                  <Database size={14} className="mt-0.5 shrink-0 text-blue-500" /> 
+                  <span><b className="text-stone-800">Cây gia phả</b> - Thêm/xóa/chỉnh sửa thành viên, ⚡Phân quyền quản trị nhánh chi họ.</span>
                 </p>                
-                <p className="text-xs flex items-center gap-1 whitespace-nowrap">
-                  <ShieldCheck size={12} className="shrink-0" /> 
-                  <span><b>Mod & Bảo mật</b> - Thêm/xóa Mod, thiết lập ViewPIN, ModPIN, đổi mã PIN.</span>
+                <p className="text-[11px] sm:text-xs flex items-start gap-2 text-stone-600 leading-relaxed">
+                  <ShieldCheck size={14} className="mt-0.5 shrink-0 text-blue-500" /> 
+                  <span><b className="text-stone-800">Mod & Bảo mật</b> - Thêm/xóa Mod, thiết lập ViewPIN, ModPIN, đổi mã PIN.</span>
                 </p>
-                <p className="text-xs flex items-center gap-1 whitespace-nowrap">
-                  <ImageIcon size={12} className="shrink-0" /> 
-                  <span><b>Trang giới thiệu</b> - Cập nhật thông tin, hình ảnh chung của gia tộc.</span>
+                <p className="text-[11px] sm:text-xs flex items-start gap-2 text-stone-600 leading-relaxed">
+                  <ImageIcon size={14} className="mt-0.5 shrink-0 text-blue-500" /> 
+                  <span><b className="text-stone-800">Trang giới thiệu</b> - Cập nhật thông tin, hình ảnh chung của gia tộc.</span>
                 </p>
-                <p className="text-xs flex items-center gap-1 whitespace-nowrap">
-                  <LayoutDashboard size={12} className="shrink-0" /> 
-                  <span><b>Hệ thống</b> - Thùng rác (xóa 2 lớp), Sao lưu/Phục hồi dữ liệu, xem Nhật ký hệ thống.</span>
+                <p className="text-[11px] sm:text-xs flex items-start gap-2 text-stone-600 leading-relaxed">
+                  <LayoutDashboard size={14} className="mt-0.5 shrink-0 text-blue-500" /> 
+                  <span><b className="text-stone-800">Hệ thống</b> - Thùng rác (xóa 2 lớp), Sao lưu/Phục hồi dữ liệu, xem Nhật ký hệ thống.</span>
                 </p>
               </div>
             </div>
@@ -133,22 +133,22 @@ const About: React.FC<AboutProps> = ({ aboutFamily, familyPhotos = [] }) => {
               <div className="p-2 bg-violet-50 rounded-lg text-pink-400 shrink-0"><Atom size={20}/></div>
               <div>
                 <p className="font-black text-pink-400 uppercase text-[10px] mb-1">Quản trị phân nhánh (Mod)</p>
-                <p className="text-xs">Trưởng tộc có thể phân quyền (⚡) cho nhiều Mod để hỗ trợ quản trị các thành viên trong nhánh chi họ.</p>
-                <p className="text-xs">Nút trên thẻ Thành viên: 📝 Chỉnh sửa hồ sơ - 👧/👦 Thêm Vợ/Chồng - 👶🏻 Thêm con cái</p>
+                <p className="text-[11px] sm:text-xs text-stone-600 leading-relaxed mb-1">Trưởng tộc có thể phân quyền (⚡) cho nhiều Mod để hỗ trợ quản trị các thành viên trong nhánh chi họ.</p>
+                <p className="text-[11px] sm:text-xs text-stone-600 font-medium">Nút trên thẻ Thành viên: 📝 Chỉnh sửa hồ sơ - 👧/👦 Thêm Vợ/Chồng - 👶🏻 Thêm con cái</p>
               </div>
             </div>
             <div className="flex gap-4 items-start">
               <div className="p-2 bg-amber-50 rounded-lg text-amber-600 shrink-0"><Trash2 size={20}/></div>
               <div>
                 <p className="font-black text-amber-800 uppercase text-[10px] mb-1">An toàn dữ liệu</p>
-                <p className="text-xs">Xóa dữ liệu 2 cấp an toàn, cơ chế Sao lưu & Phục hồi toàn bộ CSDL nhanh chóng, hạn chế truy cập bằng mã PIN và IP. </p>
+                <p className="text-[11px] sm:text-xs text-stone-600 leading-relaxed">Xóa dữ liệu 2 cấp an toàn, cơ chế Sao lưu & Phục hồi toàn bộ CSDL nhanh chóng, hạn chế truy cập bằng mã PIN và IP. </p>
               </div>
             </div>
             <div className="flex gap-4 items-start">
               <div className="p-2 bg-green-50 rounded-lg text-green-600 shrink-0"><History size={20}/></div>
               <div>
                 <p className="font-black text-green-800 uppercase text-[10px] mb-1">Nhật ký hệ thống (Audit Logs)</p>
-                <p className="text-xs">Mọi thao tác thêm/xóa/sửa đều được lưu vết thời gian thực để đảm bảo tính minh bạch của dữ liệu gia tộc.</p>
+                <p className="text-[11px] sm:text-xs text-stone-600 leading-relaxed">Mọi thao tác thêm/xóa/sửa đều được lưu vết thời gian thực để đảm bảo tính minh bạch của dữ liệu gia tộc.</p>
               </div>
             </div>
           </div>

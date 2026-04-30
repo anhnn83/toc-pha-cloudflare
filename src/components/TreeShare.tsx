@@ -1,4 +1,4 @@
-// src/components/TreeShare.tsx -- version 3.6 (Fixed Stepchild Icon & Heir Logic)
+// src/components/TreeShare.tsx -- version 3.7 (Two-line Name & Alias Layout, Kept all v3.6 Logic)
 
 import React, { useMemo, useState } from 'react';
 import { User, Target } from 'lucide-react';
@@ -23,6 +23,7 @@ const extractYear = (dateStr?: string) => {
   return parts.length === 3 ? parseInt(parts[2]) : parseInt(parts[0]);
 };
 
+// Hàm cắt ngắn tên lũy tiến (Sẽ không truyền nickname vào đây nữa để lấy đúng TÊN)
 export const formatDisplayName = (fullName: string, nickname?: string) => {
   if (!fullName) return nickname ? `(${nickname})` : "Ẩn danh";
 
@@ -117,7 +118,6 @@ export const MemberCardBase: React.FC<BaseCardProps> = ({
     const fatherName = fatherRaw ? (fatherRaw.fullName || fatherRaw.full_name) : null;
     const motherName = motherRaw ? (motherRaw.fullName || motherRaw.full_name) : null;
 
-    // --- BẢN VÁ: Con riêng và Con ruột đều dùng icon giọt máu ---
     let indicator = (person.relationType === 'biological' || person.relationType === 'step') ? '🩸' : '👨‍👧';
     let text = '';
     
@@ -128,6 +128,11 @@ export const MemberCardBase: React.FC<BaseCardProps> = ({
     
     return `${indicator}${text}`;
   }, [person, members, isSpouse, bloodlineName]);
+
+  // Format biệt danh viết hoa chữ cái đầu cho đồng bộ
+  const formattedNick = person.nickname 
+    ? person.nickname.trim().toLowerCase().split(/\s+/).map((w: string) => w.charAt(0).toUpperCase() + w.slice(1)).join(' ') 
+    : '';
 
  return (
     <div 
@@ -148,10 +153,18 @@ export const MemberCardBase: React.FC<BaseCardProps> = ({
         <span className="truncate ml-1 flex-1 text-right tracking-tight">{parentLabel}</span>
       </div>
 
-      <div className="py-3 px-2 border-b border-stone-100 bg-white flex items-center justify-center min-h-[55px]">
+      {/* --- BẢN VÁ: HÀNG 1 (TÊN) VÀ HÀNG 2 (BIỆT DANH) --- */}
+      <div className="py-2 px-2 border-b border-stone-100 bg-white flex flex-col items-center justify-center min-h-[55px] w-full overflow-hidden">
+        {/* Hàng 1: Tên viết tắt lũy tiến */}
         <h4 className="text-[12px] font-black text-stone-800 leading-tight truncate w-full" title={person.fullName}>
-          {formatDisplayName(person.fullName, person.nickname)}
+          {formatDisplayName(person.fullName)}
         </h4>
+        {/* Hàng 2: Biệt danh (Cắt ngắn có dấu ... nhờ truncate) */}
+        {formattedNick && (
+          <div className="text-[10px] text-stone-500 font-bold italic truncate w-full mt-0.5" title={person.nickname}>
+            {formattedNick}
+          </div>
+        )}
       </div>
 
       <div className="py-3 flex justify-center bg-stone-50/50 relative">
@@ -220,7 +233,6 @@ export const useTreeCommonLogic = (members: Member[], transformRef: React.RefObj
 
   const handleFocus = (id: string) => {
     setFocusId(id);
-    // Đợi React re-render xong cây mới rồi mới căn giữa
     setTimeout(() => {
       transformRef.current?.centerView(0.6, 600);
     }, 150);
@@ -236,7 +248,6 @@ export const useTreeCommonLogic = (members: Member[], transformRef: React.RefObj
     }) || members[0];
   }, [members, focusId]);
 
-  // THUẬT TOÁN TÌM DÒNG ĐÍCH TÔN ĐÃ CHUẨN HÓA DỮ LIỆU
   // THUẬT TOÁN TÌM DÒNG ĐÍCH TÔN ĐÃ FIX LỖI (Nguyên tắc 1 & 2)
   const dichTonMap = useMemo(() => {
     const map: Record<string, number> = {};
@@ -246,7 +257,6 @@ export const useTreeCommonLogic = (members: Member[], transformRef: React.RefObj
     let currentGen = 0;
     map[currentDT.id] = currentGen;
 
-    // Hàm phụ: Lấy tất cả con trai ruột của 1 người, sắp xếp theo thứ tự sinh
     const getSons = (memberId: string) => {
       return members.filter(m => {
         const mFId = m.parents?.fatherId || (m as any).father_id;
@@ -257,18 +267,15 @@ export const useTreeCommonLogic = (members: Member[], transformRef: React.RefObj
     };
 
     const findNextHeir = (member: any): Member | null => {
-      // Ưu tiên 1: Lấy người con trai ruột ĐẦU TIÊN của đích tôn hiện tại
       const sons = getSons(member.id);
       if (sons.length > 0) return sons[0];
 
-      // Ưu tiên 2: Không có con trai -> Tìm con trai của EM TRAI kế tiếp
       const fId = member.parents?.fatherId || member.father_id;
       const mId = member.parents?.motherId || member.mother_id;
       const parentId = fId || mId;
 
-      if (!parentId) return null; // Thủy tổ không có con -> đứt dòng
+      if (!parentId) return null; 
 
-      // Tìm tất cả anh em trai ruột
       const allBrothers = members.filter(m => {
         const mFId = m.parents?.fatherId || (m as any).father_id;
         const mMId = m.parents?.motherId || (m as any).mother_id;
@@ -279,16 +286,14 @@ export const useTreeCommonLogic = (members: Member[], transformRef: React.RefObj
       const myIndex = allBrothers.findIndex(b => b.id === member.id);
       if (myIndex === -1) return null;
 
-      // Cắt lấy danh sách các em trai (những người nằm sau đích tôn hiện tại)
       const youngerBrothers = allBrothers.slice(myIndex + 1);
 
-      // Tìm xem em trai nào có con trai đầu tiên thì lấy người con đó
       for (const bro of youngerBrothers) {
         const broSons = getSons(bro.id);
         if (broSons.length > 0) return broSons[0];
       }
 
-      return null; // Đứt dòng
+      return null;
     };
 
     while (true) {
