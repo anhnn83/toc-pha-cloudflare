@@ -57,3 +57,6 @@ $RECYCLE.BIN/
 *.njsproj
 *.sln
 *.sw?
+
+.dev.vars*
+!.dev.vars.example
