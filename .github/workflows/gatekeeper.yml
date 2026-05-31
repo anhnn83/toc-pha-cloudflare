@@ -1,0 +1,40 @@
+# .github/workflows/gatekeeper.yml
+
+name: Gatekeeper Security Check
+
+on:
+  push:
+    branches:
+      - main
+
+jobs:
+  security-audit:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 2 # Lấy commit hiện tại và commit trước đó để so sánh
+
+      - name: Check for unauthorized file changes
+        run: |
+          # Lấy danh sách các file bị thay đổi trong commit vừa rồi
+          CHANGED_FILES=$(git diff --name-only HEAD^ HEAD)
+          
+          echo "Các file đã thay đổi: $CHANGED_FILES"
+
+          # Kiểm tra từng file
+          for file in $CHANGED_FILES; do
+            # Chỉ cho phép thay đổi data.json, config.json và các tệp trong thư mục images
+            if [[ ! "$file" =~ ^public/data\.json$ ]] && \
+               [[ ! "$file" =~ ^public/config\.json$ ]] && \
+               [[ ! "$file" =~ ^public/backups/.* ]] && \
+               [[ ! "$file" =~ ^public/images/.* ]]; then
+              
+              echo "❌ CẢNH BÁO BẢO MẬT: Phát hiện thay đổi trái phép tại tệp: $file"
+              echo "Hệ thống chỉ cho phép cập nhật Dữ liệu và Hình ảnh."
+              exit 1 # Kết thúc với lỗi để đánh dấu Workflow thất bại
+            fi
+          done
+          
+          echo "✅ Hợp lệ: Mọi thay đổi đều nằm trong phạm vi cho phép."

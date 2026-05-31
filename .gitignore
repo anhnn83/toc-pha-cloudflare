@@ -1,0 +1,60 @@
+# ==========================================
+# 1. THƯ MỤC CHỨA DOCS, THƯ VIỆN & CODE BUILD RA
+# ==========================================
+node_modules/
+dist/
+dist-ssr/
+build/
+.output/
+docs/
+
+# ==========================================
+# 2. FILE TẠM CỦA CLOUDFLARE WRANGLER (QUAN TRỌNG)
+# ==========================================
+# Thư mục này chứa dữ liệu local của D1, R2 và các file build tạm của Cloudflare. 
+# Tuyệt đối không đẩy lên Git vì nó rất nặng và chứa dữ liệu test của bạn.
+.wrangler/
+
+# ==========================================
+# 3. BIẾN MÔI TRƯỜNG & BẢO MẬT (QUAN TRỌNG)
+# ==========================================
+# Tuyệt đối không đẩy các file chứa mật khẩu, JWT_SECRET, API keys lên mạng.
+.env
+.env.*
+!.env.example
+.dev.vars
+wrangler.toml
+
+# ==========================================
+# 4. LOGS & FILE RÁC CỦA HỆ ĐIỀU HÀNH
+# ==========================================
+logs
+*.log
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+pnpm-debug.log*
+
+# MacOS
+.DS_Store
+.AppleDouble
+.LSOverride
+
+# Windows
+Thumbs.db
+ehthumbs.db
+Desktop.ini
+$RECYCLE.BIN/
+
+# ==========================================
+# 5. CẤU HÌNH CỦA TRÌNH SOẠN THẢO CODE (IDE)
+# ==========================================
+.vscode/*
+!.vscode/extensions.json
+!.vscode/settings.json
+.idea/
+*.suo
+*.ntvs*
+*.njsproj
+*.sln
+*.sw?
