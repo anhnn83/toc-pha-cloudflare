@@ -48,11 +48,37 @@ Dự án này thay thế hoàn toàn các cuốn sổ gia phả giấy truyền 
 
 Thực hiện tuần tự theo các bước dưới đây để đưa hệ thống lên mạng:
 
-**Bước 3.1: Tải mã nguồn về máy tính**
+**Bước 3.1: Tải mã nguồn về máy tính và tạo wrangler.toml**
 Mở Terminal (CMD / PowerShell) và chạy lệnh:
 ```bash
 git clone [https://github.com/TEN_TAI_KHOAN_CUA_BAN/gia-pha-project.git](https://github.com/TEN_TAI_KHOAN_CUA_BAN/gia-pha-project.git)
 cd gia-pha-project
+```
+
+Bên trong thư mục dự án - \gia-pha-project - tạo một file có tên là `wrangler.toml` với chính xác nội dung bên dưới (copy-paste):
+
+```bash
+# wrangler.toml - production
+
+name = "gia-pha-project"
+pages_build_output_dir = "dist"
+compatibility_date = "2024-04-01"
+
+[vars]
+JWT_SECRET = "Toc_Pha_Truc_Tuyen_by_anhnn"
+
+[[d1_databases]]
+binding = "DB"
+database_name = "gia-pha-db"
+database_id = "DÁN_ID_DATABASE_D1_CỦA_BẠN_VÀO_ĐÂY"
+
+[[r2_buckets]]
+binding = "BUCKET"
+bucket_name = "gia-pha-images"
+
+[[kv_namespaces]]
+binding = "KV"
+id = "DÁN_ID_KV_NAMESPACE_CỦA_BẠN_VÀO_ĐÂY"
 ```
 
 **Bước 3.2: Đăng nhập hệ thống Cloudflare (CLI)**
@@ -77,12 +103,13 @@ Quay trở lại thư mục mã nguồn dự án:
 ```bash
 cd .\gia-pha-project\
 ```
-Mở tệp `wrangler.toml` ra, điền các chuỗi mã ID mới của bạn vào thay thế cho các ID chờ sẵn.
+Mở tệp `wrangler.toml` đã tạo trưóc đó ra, điền các chuỗi mã ID mới của bạn vào thay thế cho các ID chờ sẵn (D1 database_id và KV id).
+
 Từ thư mục gốc dự án, khởi chạy SQL Schema để tạo các bảng dữ liệu cho D1:
 ```bash
 npx wrangler d1 execute gia-pha-db --remote --file=./sql/schema.sql
 ```
-*(Nếu tệp schema.sql nằm ở thư mục ngoài cùng, đổi lệnh thành --file=./schema.sql).*
+*(Lưu ý nếu đưòng dẫn thư mục schema.sql của bạn khác biệt với dự án gốc).*
 
 **Bước 3.5: Đẩy mã nguồn lên GitHub**
 Lưu và đẩy cấu hình lên kho chứa GitHub cá nhân của bạn:
@@ -108,7 +135,7 @@ Bấm nút Save and Deploy và đợi Cloudflare biên dịch (1-3 phút).
 
 ## 🔑 4. Thiết lập và đăng nhập hệ thống lần đầu
 
-Sau khi deploy thành công, hệ thống sẽ cấp cho bạn một đường link dạng: `https://ten-du-an.pages.dev`.
+Sau khi deploy thành công, hệ thống sẽ cấp cho bạn một đường link dạng: `https://ten-du-an.pages.dev`. Bạn có thể thay thế bằng tên miền riêng của mình (để tránh loãng, tôi sẽ không hướng dẫn phần này - hãy hỏi AI 😁).
 
 **⚙️ Cài đặt Biến môi trường & Trói buộc tài nguyên (Bindings)**
 Truy cập vào phần Settings của dự án (Pages) trên Cloudflare:
@@ -120,11 +147,11 @@ Truy cập vào phần Settings của dự án (Pages) trên Cloudflare:
 * **KV namespace:** Tên biến `KV` | Chọn `gia-pha-kv`.
 
 **🔒 Thiết lập ban đầu trên giao diện Web**
-1. Truy cập đến trang gia phả vừa dựng. Mã PIN Quản trị viên (Trưởng tộc) mặc định: `123456`.
+1. Truy cập đến trang gia phả vừa dựng. Mã PIN Quản trị viên (Trưởng tộc) mặc định khi mới khởi tạo là: `123456`.
 2. Chuyển sang tab Quản trị và đăng nhập bằng ADMIN PIN.
 3. Đổi mã PIN theo mong muốn của bạn để bảo mật.
-4. Tạo Thủy tổ (Ông tổ của dòng họ): Đây là mốc quan trọng! Khi Cây gia phả trở nên lớn, việc thay đổi Thủy tổ là gần như không thể do hệ thống áp dụng quy tắc xóa an toàn để tránh dữ liệu mồ côi.
-5. Tiếp tục cập nhật Cây gia phả bắt đầu từ Thủy tổ theo hướng dẫn trên màn hình.
+4. Tạo Thủy tổ (Ông tổ của dòng họ): Đây là mốc quan trọng! Khi Cây gia phả trở nên lớn, việc thay đổi Thủy tổ là gần như không thể do hệ thống áp dụng quy tắc thêm và xóa an toàn để tránh dữ liệu mồ côi.
+5. Tiếp tục cập nhật cây gia phả bắt đầu từ Thủy tổ (rất trực quan và đơn giản).
 
 ---
 
