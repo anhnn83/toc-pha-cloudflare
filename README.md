@@ -160,8 +160,8 @@ Truy cập vào phần Settings của dự án (Pages) trên Cloudflare:
 **🌐 Demo page:** [nguyen.cronpost.com](https://nguyen.cronpost.com)
 
 **Nguyễn Ngọc Anh**
- ➤ **Telegram:** [t.me/anhnn83](https://t.me/anhnn83)
- ✉ **Email:** [anhnn@dgd.vn](mailto:anhnn@dgd.vn)
+    ➤ **Telegram:** [t.me/anhnn83](https://t.me/anhnn83)
+    ✉ **Email:** [anhnn@dgd.vn](mailto:anhnn@dgd.vn)
 
 ## License
 Dự án này được cấp phép theo các điều khoản của [GNU General Public License v3.0](LICENSE). Tất cả các tệp mã nguồn trong kho lưu trữ này đều thuộc phạm vi áp dụng của giấy phép này trừ khi có tuyên bố khác.
