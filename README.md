@@ -49,6 +49,7 @@ Dự án này thay thế hoàn toàn các cuốn sổ gia phả giấy truyền 
 Thực hiện tuần tự theo các bước dưới đây để đưa hệ thống lên mạng:
 
 **Bước 3.1: Tải mã nguồn về máy tính và tạo wrangler.toml**
+
 Mở Terminal (CMD / PowerShell) và chạy lệnh:
 ```bash
 git clone [https://github.com/TEN_TAI_KHOAN_CUA_BAN/gia-pha-project.git](https://github.com/TEN_TAI_KHOAN_CUA_BAN/gia-pha-project.git)
