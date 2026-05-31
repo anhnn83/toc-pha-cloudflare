@@ -55,7 +55,7 @@ git clone [https://github.com/TEN_TAI_KHOAN_CUA_BAN/gia-pha-project.git](https:/
 cd gia-pha-project
 ```
 
-Bên trong thư mục dự án - \gia-pha-project - tạo một file có tên là `wrangler.toml` với chính xác nội dung bên dưới (copy-paste):
+Bên trong thư mục dự án '.\gia-pha-project' tạo một file có tên là `wrangler.toml` với chính xác nội dung bên dưới (copy-paste):
 
 ```bash
 # wrangler.toml - production
