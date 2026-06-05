@@ -1,174 +1,70 @@
-# 🌳 Tộc Phả Trực Tuyến — Cloudflare Fullstack Ecosystem
+# 🍋‍🟩 Chanh — Bộ gõ Telex Tiếng Việt Tối Giản & Mạnh Mẽ
 
-[![Framework](https://img.shields.io/badge/Framework-React%20%7C%20Vite-61DAFB?style=for-the-badge&logo=react&logoColor=black)](#)
-[![Platform](https://img.shields.io/badge/Platform-Cloudflare%20Pages-F38020?style=for-the-badge&logo=cloudflare&logoColor=white)](https://pages.cloudflare.com/)
-[![Database](https://img.shields.io/badge/Database-Cloudflare%20D1-0051C3?style=for-the-badge&logo=cloudflare&logoColor=white)](#)
+[![Platform](https://img.shields.io/badge/Platform-Windows-F38020?style=for-the-badge&logo=cloudflare&logoColor=white)](#)
+[![Language](https://img.shields.io/badge/Language-C++-3776AB?style=for-the-badge&logo=python&logoColor=white)](#)
 
-> **Tộc Phả Trực Tuyến** là dự án quản lý và lưu trữ Cây Gia Phả/Tộc Phả hiện đại, bảo mật, tối ưu trải nghiệm trên máy tính cũng như thiết bị di động (PWA). Hệ thống được xây dựng hoàn toàn trên nền tảng Serverless Edge Computing của Cloudflare, giúp một gia tộc hoặc dòng họ dễ dàng số hóa cội nguồn một cách nhanh chóng và trực quan nhất.
+[![GitHub](https://img.shields.io/badge/GitHub-181717?style=for-the-badge&logo=github&logoColor=white)](https://github.com/cronpostps/chanh)
+[![Latest Version](https://img.shields.io/badge/-Latest%20Version-blue?style=for-the-badge)](https://github.com/cronpostps/chanh/releases/download/latest/ChanhEngine_latest.zip)
 
----
 
-> 💡 **Tip cho Coder:** Hãy copy-paste toàn bộ nội dung tài liệu này cho một AI (ChatGPT/Gemini/Claude...) để nó có ngữ cảnh và giúp bạn gỡ lỗi, deploy dự án nhanh chóng hơn!
-
----
-
-## ✨ 1. Giới thiệu & Các tính năng cốt lõi
-
-Dự án này thay thế hoàn toàn các cuốn sổ gia phả giấy truyền thống hoặc các trang web cũ kỹ bằng một ứng dụng web fullstack hiện đại (Frontend: **React/Vite** - Backend: **Cloudflare Workers & Pages Functions**).
-
-**🚀 Ưu điểm vượt trội**
-
-* **Chi phí vận hành 0đ:** Tận dụng tối đa chính sách Free Tier (Gói miễn phí) của Cloudflare. Dòng họ của bạn không cần tốn tiền mua Hosting, VPS hay gia hạn tên miền hàng năm. Hệ thống chạy vĩnh viễn miễn phí.
-* **Tốc độ siêu tốc:** Nhờ kiến trúc Serverless Edge, toàn bộ API và giao diện được phân phối từ trung tâm dữ liệu gần người dùng nhất (Anycast Network), tải trang chỉ trong mili-giây.
-* **Lưu trữ đám mây ổn định:** Sử dụng Cloudflare R2 Storage (tương thích AWS S3) giúp lưu trữ ảnh chân dung, ảnh tư liệu dòng họ với dung lượng lớn mà không làm chậm hệ thống.
-* **Nhập liệu trực quan và dễ dàng:** Tối ưu hoá việc nhập liệu
-* **Bảo mật tuyệt đối:** Cơ sở dữ liệu Cloudflare D1 được tự động sao lưu, bảo vệ bằng các lớp tường lửa (WAF) hàng đầu của Cloudflare. Đầy đủ các tính năng bảo mật cần thiết dànnh cho Admin để phân quyền xem và cập nhật (chia Mods) cây gia phả.
-* **Tiện ích gia tộc thông minh:** Theo dõi theo nhánh, xác định đích tôn, quy đổi ngày giỗ theo lịch Âm, nhắc nhở ngày giỗ/sinh nhật.
-
-**👥 Phân quyền nhập liệu và bảo mật linh hoạt**
-
-* **Trưởng tộc (Admin):** Toàn quyền thêm, sửa, xóa mọi thành viên trong dòng họ, thiết lập bảo mật người xem, thêm/xoá/sửa Trưỏng nhánh, kiểm tra và xử lý Nhật ký, cập nhật thông tin chung gia tộc...
-* **Trưởng nhánh (Mods):** Thêm, sửa, xóa thành viên trong nhánh được giao, kiểm tra Nhật ký.
-* **Thành viên dòng họ/Mgười xem:** Sử dụng mã PIN bảo mật để vào xem cây gia phả (tuỳ theo quy định của Admin), kiểm tra lịch giỗ, tiểu sử thành viên và các nội dung khác...
+> **Chanh Telex** là một bộ gõ Telex siêu nhẹ, "plug-and-play" dành cho anh em developer và game thủ. Không bloatware, không quảng cáo, bật lên là gõ với trải nghiệm mượt mà, được thiết kế để hạn chế tối đa việc phá hỏng code, gõ nhầm lệnh hay giật lag khi chơi game.
 
 ---
 
-## 🛠️ 2. Môi trường chuẩn bị
+## 🌱 1. Nguồn gốc dự án (Credits)
 
-Để tự triển khai (deploy) dự án này từ con số 0, bạn cần chuẩn bị sẵn:
+Dự án **Chanh** được xây dựng và phát triển dựa trên nền tảng mã nguồn mở tuyệt vời của dự án **[Cay](https://github.com/tctvn/cay)** (bởi tác giả [tctvn](https://github.com/tctvn)). 
 
-1. **Tài khoản GitHub:** Dùng để lưu trữ mã nguồn cá nhân và thiết lập chế độ tự động cập nhật web (CI/CD). Hãy tạo sẵn một Repository trống.
-2. **Tài khoản Cloudflare:** Đăng ký hoàn toàn miễn phí tại dash.cloudflare.com.
-3. **Thẻ VISA / Mastercard:** Cloudflare yêu cầu liên kết thẻ thanh toán quốc tế để kích hoạt tính năng lưu trữ ảnh R2 Storage. (Bạn nên sử dụng thẻ ảo hoặc thẻ có số dư bằng 0đ để an tâm tuyệt đối, hệ thống sẽ không bị trừ phí).
-4. **Môi trường máy tính:** Đã cài sẵn Node.js (Phiên bản LTS từ 18 trở lên).
+Chúng tôi xin gửi lời cảm ơn chân thành đến tác giả của **Cay** vì một kiến trúc lõi C++ cực kỳ thông minh và tối ưu. **Chanh** kế thừa trọn vẹn triết lý "siêu nhẹ, zero-config" của người tiền nhiệm, đồng thời được "độ" thêm một loạt tính năng cao cấp để trở thành một bộ gõ toàn diện hơn cho nhu cầu sử dụng hàng ngày.
 
 ---
 
-## 🚀 3. Hướng dẫn triển khai (Deploy) lần đầu (dành cho Admin) - Nếu việc triển khai bị lỗi hoặc cần sự giúp đỡ của tác giả, hãy liên hệ theo thông tin bên dưới nhé, tôi luôn sẵn sàng giúp đỡ bạn.
+## ✨ 2. Tính năng "ăn tiền" của Chanh
 
-Thực hiện tuần tự theo các bước dưới đây để đưa hệ thống lên mạng:
+- **Siêu nhẹ & Tối ưu hóa (Zero-Bloat):** File thực thi chỉ khoảng ~561KB. Được build với cờ tối ưu hóa cấp cao nhất của MSVC (`/O2`, `/OPT:ICF`), không phụ thuộc thư viện bên thứ ba, ngốn RAM gần như bằng 0.
+- **Ngủ đông thông minh (App Bypass):** Tự động phát hiện và nhường lại quyền điều khiển bàn phím khi bạn mở các ứng dụng/game trong danh sách Bypass (CS:GO, LoL, Dota 2, Valorant...Lưu ý nhớ nhập đúng file thực thi tiến trình (.exe) khi thêm vào danh sách). Tha hồ vừa chat vừa chơi game!
+- **Gõ tắt (Macro):** Hỗ trợ thiết lập các từ gõ tắt cá nhân hóa, giúp tăng tốc độ gõ văn bản và code.
+- **Giao diện "Pro":** Bổ sung cửa sổ thiết lập UI hiện đại, quản lý danh sách Gõ tắt và Ngủ đông trực quan, lưu trữ dữ liệu tự động.
+- **Khắc phục triệt để lỗi trình duyệt:** Sử dụng kỹ thuật tiêm phím ảo đột phá, giải quyết dứt điểm 100% lỗi nuốt chữ, nhảy nháy khi gõ trên thanh địa chỉ Chrome, Edge hay VSCode...
+- **Tùy biến linh hoạt:** Hỗ trợ chuẩn hóa dấu tiếng Việt (òa -> oà), tùy chọn gõ `w` thành `ư`.
+- **Auto-Start an toàn:** Tự khởi động nhanh chóng cùng Windows.
 
-**Bước 3.1: Tải mã nguồn về máy tính và tạo wrangler.toml**
+## 🛠️ 3. Build từ Source
 
-Mở Terminal (CMD / PowerShell) và chạy lệnh:
+Yêu cầu: Có sẵn `CMake` và `MSVC` (Visual Studio C++ Build Tools).
+
 ```bash
-git clone [https://github.com/TEN_TAI_KHOAN_CUA_BAN/gia-pha-project.git](https://github.com/TEN_TAI_KHOAN_CUA_BAN/gia-pha-project.git)
-cd gia-pha-project
+git clone https://github.com/tctvn/cay.git
+cd cay
+cmake -B build
+cmake --build build --config Release
 ```
+*File build xong sẽ nằm tại build/Release/chanh.exe.*
 
-Bên trong thư mục dự án '.\gia-pha-project' tạo một file có tên là `wrangler.toml` với chính xác nội dung bên dưới (copy-paste):
+## ⌨️ 4. Cách dùng
 
-```bash
-# wrangler.toml - production
+1. Chạy file chanh.exe -> app sẽ chạy ngầm dưới khay hệ thống. Để Chanh hoạt động với các ứng dụng lõi của Windows (eg. MS Edge...), cần chạy nó dưới quyền quản trị (Run as Administrator).
 
-name = "gia-pha-project"
-pages_build_output_dir = "dist"
-compatibility_date = "2024-04-01"
+2. Click chuột phải vào biểu tượng dưới khay hệ thống để mở bảng Thiết lập (Thêm Gõ tắt, Thêm App Game cần Bypass, Tự khởi động...).
 
-[vars]
-JWT_SECRET = "Toc_Pha_Truc_Tuyen_by_anhnn"
+3. Cú pháp chuẩn Telex: aa=â, oo=ô, ee=ê, dd=đ, w=ă/ư/ơ.
 
-[[d1_databases]]
-binding = "DB"
-database_name = "gia-pha-db"
-database_id = "DÁN_ID_DATABASE_D1_CỦA_BẠN_VÀO_ĐÂY"
+4. Dấu: s=sắc, f=huyền, r=hỏi, x=ngã, j=nặng, z=xoá dấu.
 
-[[r2_buckets]]
-binding = "BUCKET"
-bucket_name = "gia-pha-images"
+5. Phím tắt Bật/Tắt nhanh: Ctrl + Shift.
 
-[[kv_namespaces]]
-binding = "KV"
-id = "DÁN_ID_KV_NAMESPACE_CỦA_BẠN_VÀO_ĐÂY"
-```
+## ☎️ 5. Đóng góp & Mã nguồn mở
 
-**Bước 3.2: Đăng nhập hệ thống Cloudflare (CLI)**
-Chạy lệnh xác thực để liên kết với tài khoản Cloudflare:
-```bash
-npx wrangler login
-```
-*(Trình duyệt sẽ mở ra, hãy đăng nhập và bấm Allow để cấp quyền).*
+**Mọi đóng góp, tối ưu code & báo lỗi đều được hoan nghênh tại kho lưu trữ chính thức!**
 
-**Bước 3.3: Khởi tạo tài nguyên (Database, Storage, Cache)**
-Di chuyển Terminal ra một thư mục trống bên ngoài để tạo tài nguyên (tránh lỗi xung đột bộ nhớ đệm):
-```bash
-cd ..
-npx wrangler d1 create gia-pha-db
-npx wrangler r2 bucket create gia-pha-images
-npx wrangler kv namespace create gia-pha-kv
-```
-*(Hãy copy lại các chuỗi mã ID của D1 và KV hiển thị trên màn hình để dùng cho bước tiếp theo).*
+**👨‍💻 Dev by ANHNN**
 
-**Bước 3.4: Lắp ráp cấu hình & Khởi tạo Database**
-Quay trở lại thư mục mã nguồn dự án:
-```bash
-cd .\gia-pha-project\
-```
-Mở tệp `wrangler.toml` đã tạo trưóc đó ra, điền các chuỗi mã ID mới của bạn vào thay thế cho các ID chờ sẵn (D1 database_id và KV id).
+[![Telegram](https://img.shields.io/badge/Telegram-2CA5E0?style=for-the-badge&logo=telegram&logoColor=white)](https://t.me/anhnn83)
+[![Email](https://img.shields.io/badge/Email-D14836?style=for-the-badge&logo=gmail&logoColor=white)](mailto:anhnn@dgd.vn)
+[![website](https://img.shields.io/badge/Website-anhnn.cronpost.com-181717?style=for-the-badge&logo=google-chrome&logoColor=white)](https://anhnn.cronpost.com)
 
-Từ thư mục gốc dự án, khởi chạy SQL Schema để tạo các bảng dữ liệu cho D1:
-```bash
-npx wrangler d1 execute gia-pha-db --remote --file=./sql/schema.sql
-```
-*(Lưu ý nếu đưòng dẫn thư mục schema.sql của bạn khác biệt với dự án gốc).*
-
-**Bước 3.5: Đẩy mã nguồn lên GitHub**
-Lưu và đẩy cấu hình lên kho chứa GitHub cá nhân của bạn:
-```bash
-git add .
-git commit -m "Setup Cloudflare resources"
-git push origin main
-```
-
-**Bước 3.6: Kích hoạt hệ thống trên Web Cloudflare Pages**
-Đăng nhập trang quản trị Cloudflare, truy cập mục Workers & Pages.
-Bấm nút Create application và CHỌN TAB "PAGES" (Nằm cạnh tab Workers).
-Bấm Connect to Git và Chọn kho lưu trữ GitHub chứa dự án này.
-
-Cài đặt Build (Build settings):
-* **Framework preset:** Vite
-* **Build command:** npm run build
-* **Build output directory:** dist
-
-Bấm nút Save and Deploy và đợi Cloudflare biên dịch (1-3 phút).
-
----
-
-## 🔑 4. Thiết lập và đăng nhập hệ thống lần đầu
-
-Sau khi deploy thành công, hệ thống sẽ cấp cho bạn một đường link dạng: `https://ten-du-an.pages.dev`. Bạn có thể thay thế bằng tên miền riêng của mình (để tránh loãng, tôi sẽ không hướng dẫn phần này - hãy hỏi AI 😁).
-
-**⚙️ Cài đặt Biến môi trường & Trói buộc tài nguyên (Bindings)**
-Truy cập vào phần Settings của dự án (Pages) trên Cloudflare:
-
-1. **Environment variables:** Bấm Add variable. Tên biến: `JWT_SECRET` | Giá trị: Một chuỗi mật mã phức tạp bất kỳ.
-2. **Bindings:**
-* **D1 database:** Tên biến `DB` | Chọn `gia-pha-db`.
-* **R2 bucket:** Tên biến `BUCKET` | Chọn `gia-pha-images`.
-* **KV namespace:** Tên biến `KV` | Chọn `gia-pha-kv`.
-
-**🔒 Thiết lập ban đầu trên giao diện Web**
-1. Truy cập đến trang gia phả vừa dựng. Mã PIN Quản trị viên (Trưởng tộc) mặc định khi mới khởi tạo là: `123456`.
-2. Chuyển sang tab Quản trị và đăng nhập bằng ADMIN PIN.
-3. Đổi mã PIN theo mong muốn của bạn để bảo mật.
-4. Tạo Thủy tổ (Ông tổ của dòng họ): Đây là mốc quan trọng! Khi Cây gia phả trở nên lớn, việc thay đổi Thủy tổ là gần như không thể do hệ thống áp dụng quy tắc thêm và xóa an toàn để tránh dữ liệu mồ côi.
-5. Tiếp tục cập nhật cây gia phả bắt đầu từ Thủy tổ (rất trực quan và đơn giản).
-
----
-
-## ☎️ 5. Demo & Liên hệ với tác giả
-
-**🌐 Demo page:** [nguyen.cronpost.com](https://nguyen.cronpost.com)
-
-**Nguyễn Ngọc Anh**
-
-➤ **Telegram:** [t.me/anhnn83](https://t.me/anhnn83)
-
-✉ **Email:** [anhnn@dgd.vn](mailto:anhnn@dgd.vn)
-
-## License
-Dự án này được cấp phép theo các điều khoản của [GNU General Public License v3.0](LICENSE). Tất cả các tệp mã nguồn trong kho lưu trữ này đều thuộc phạm vi áp dụng của giấy phép này trừ khi có tuyên bố khác.
-
-Mã nguồn gốc © [Tộc Phả Trực Tuyến by anhnn](https://github.com/cronpostps/toc-pha-cloudflare)
-
-Xem thêm các dự án do [anhnn](https://t.me/anhnn83) dev tại [anhnn.cronpost.com](https://anhnn.cronpost.com)
+<hr>
+<div align="center">
+  &copy; 2026 <a href="https://github.com/cronpostps">anhnn</a>. Mọi quyền được bảo lưu.<br>
+  <b>Chanh</b> được phát hành dưới giấy phép <a href="LICENSE">GNU GPLv3</a>.
+</div>
