@@ -1,0 +1,21 @@
+# wrangler.toml - production
+
+name = "toc-pha-cloudflare"
+pages_build_output_dir = "dist"
+compatibility_date = "2024-04-01"
+
+[vars]
+JWT_SECRET = "toc_pha_cloudflare_jwt_secret"
+
+[[d1_databases]]
+binding = "DB"
+database_name = "gia-pha-db"
+database_id = "DÁN_ID_DATABASE_D1_CỦA_BẠN_VÀO_ĐÂY"
+
+[[r2_buckets]]
+binding = "BUCKET"
+bucket_name = "gia-pha-images"
+
+[[kv_namespaces]]
+binding = "KV"
+id = "DÁN_ID_KV_NAMESPACE_CỦA_BẠN_VÀO_ĐÂY"
