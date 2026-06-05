@@ -27,10 +27,11 @@ Dự án này thay thế hoàn toàn các cuốn sổ gia phả giấy truyền 
 * **Bảo mật tuyệt đối:** Cơ sở dữ liệu Cloudflare D1 được tự động sao lưu, bảo vệ bằng các lớp tường lửa (WAF) hàng đầu của Cloudflare.
 * **Tiện ích gia tộc thông minh:** Theo dõi theo nhánh, xác định đích tôn, quy đổi ngày giỗ theo lịch Âm, nhắc nhở ngày giỗ/sinh nhật.
 
-**👥 Phân quyền nhập liệu linh hoạt**
+* **👥 Phân quyền nhập liệu linh hoạt:**
 
-* **Thành viên dòng họ:** Sử dụng mã PIN bảo mật để vào xem cây gia phả, ngày giỗ, tiểu sử thành viên mà không sợ lộ thông tin nội bộ ra ngoài Internet.
-* **Quản trị viên (Trưởng tộc):** Toàn quyền thêm, sửa, xóa thành viên, lập sơ đồ hôn nhân, đăng tải hình ảnh gia đình trực tiếp trên giao diện web.
+    **Admin (Trưởng tộc):** Toàn quyền thêm, sửa, xóa thành viên, tạo trưỏng nhánh, thiết lập bảo mật, đăng tải hình ảnh gia tộc...
+    **Mod (Trưởng nhánh):** Toàn quyền thêm, sửa, xóa thành viên trong nhánh.
+    **Thành viên dòng họ:** Sử dụng mã PIN bảo mật để vào xem cây gia phả, ngày giỗ, tiểu sử thành viên mà không sợ lộ thông tin nội bộ ra ngoài Internet.
 
 ---
 
