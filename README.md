@@ -52,7 +52,7 @@ Thực hiện tuần tự theo các bước dưới đây để đưa hệ thố
 **Bước 3.1: Tải mã nguồn về máy tính**
 Mở Terminal (CMD / PowerShell) và chạy lệnh:
 ```bash
-git clone [https://github.com/TEN_TAI_KHOAN_CUA_BAN/toc-pha-cloudflare.git](https://github.com/TEN_TAI_KHOAN_CUA_BAN/toc-pha-cloudflare.git)
+git clone [https://github.com/cronpostps/toc-pha-cloudflare.git](https://github.com/cronpostps/toc-pha-cloudflare.git)
 cd toc-pha-cloudflare
 ```
 
