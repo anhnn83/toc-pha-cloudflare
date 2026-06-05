@@ -170,3 +170,5 @@ Truy cập vào phần Settings của dự án (Pages) trên Cloudflare:
 Dự án này được cấp phép theo các điều khoản của [GNU General Public License v3.0](LICENSE). Tất cả các tệp mã nguồn trong kho lưu trữ này đều thuộc phạm vi áp dụng của giấy phép này trừ khi có tuyên bố khác.
 
 Mã nguồn gốc © [Tộc Phả Trực Tuyến by anhnn](https://github.com/cronpostps/toc-pha-cloudflare)
+
+Xem thêm các dự án do [anhnn](https://t.me/anhnn83) dev tại [anhnn.cronpost.com](https://anhnn.cronpost.com)
