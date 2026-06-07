@@ -4,7 +4,7 @@
 [![Platform](https://img.shields.io/badge/Platform-Cloudflare%20Pages-F38020?style=for-the-badge&logo=cloudflare&logoColor=white)](https://pages.cloudflare.com/)
 [![Database](https://img.shields.io/badge/Database-Cloudflare%20D1-0051C3?style=for-the-badge&logo=cloudflare&logoColor=white)](#)
 
-[![GitHub](https://img.shields.io/badge/GitHub-181717?style=for-the-badge&logo=github&logoColor=white)](https://github.com/cronpostps/toc-pha-cloudflare)
+[![GitHub](https://img.shields.io/badge/GitHub-181717?style=for-the-badge&logo=github&logoColor=white)](https://github.com/anhnn83/toc-pha-cloudflare)
 [![Demo Page](https://img.shields.io/badge/-Demo%20Page-blue?style=for-the-badge)](https://nguyen.cronpost.com)
 
 > **Tộc Phả Cloudflare** là dự án quản lý và lưu trữ Cây Gia Phả/Tộc Phả hiện đại, bảo mật, tối ưu trải nghiệm trên máy tính cũng như thiết bị di động (PWA). Hệ thống được xây dựng hoàn toàn trên nền tảng Serverless Edge Computing của Cloudflare, giúp một gia tộc hoặc dòng họ dễ dàng số hóa cội nguồn một cách nhanh chóng và trực quan nhất.
@@ -52,7 +52,7 @@ Thực hiện tuần tự theo các bước dưới đây để đưa hệ thố
 **Bước 3.1: Tải mã nguồn về máy tính**
 Mở Terminal (CMD / PowerShell) và chạy lệnh:
 ```bash
-git clone https://github.com/cronpostps/toc-pha-cloudflare.git
+git clone https://github.com/anhnn83/toc-pha-cloudflare.git
 cd toc-pha-cloudflare
 ```
 
@@ -142,6 +142,6 @@ Truy cập vào phần Settings của dự án (Pages) trên Cloudflare:
 
 <hr>
 <div align="center">
-  &copy; 2026 <a href="https://github.com/cronpostps">anhnn</a>. Mọi quyền được bảo lưu.<br>
+  &copy; 2026 <a href="https://github.com/anhnn83">anhnn</a>. Mọi quyền được bảo lưu.<br>
   <b>Tộc phả Cloudflare</b> được phát hành dưới giấy phép <a href="LICENSE">GNU GPLv3</a>.
 </div>
